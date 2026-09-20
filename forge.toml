@@ -1,0 +1,92 @@
+[app]
+name = "Gitland"
+version = "0.9.0"
+id = "com.fezcode.gitland"
+icon = "src/Gitland.App/Assets/gitland.ico"
+
+[meta]
+publisher = "Fezcode"
+comments = "A clear view of your code."
+homepage = "https://github.com/fezcode/gitland"
+support_url = "https://github.com/fezcode/gitland/issues"
+
+[ui]
+theme = "mica"
+window_title = "Gitland Setup"
+
+[install]
+default_dir = "${LOCALAPPDATA}/Programs/Gitland"
+
+[uninstall]
+settings_dirs = ["${LOCALAPPDATA}/Fezcode/Gitland"]
+
+[[steps]]
+type = "welcome"
+title = "${app.name} ${app.version}"
+body = "This wizard will install Gitland ${app.version} on your computer.\n\nA native Git client built around readable diffs, three-way review, and an editable merge result.\n\nGitland needs Git for Windows on your PATH. Publishing to GitHub also uses the GitHub CLI and your existing gh authentication.\n\nClick Next to continue."
+
+[[steps]]
+type = "folder"
+title = "Select Folder"
+body = "Choose where to install Gitland ${app.version}."
+
+[[steps]]
+type = "shortcuts"
+title = "Select Shortcuts"
+body = "Choose the shortcuts you would like the installer to create."
+
+[[steps]]
+type = "install"
+title = "Installing..."
+body = "Copying Gitland to your computer."
+
+[[steps]]
+type = "finish"
+title = "Installation Complete"
+body = "Gitland has been installed successfully.\n\nClick Finish to close the installer."
+
+[[steps.launches]]
+kind = "app"
+target = "${INSTALLDIR}/gitland.exe"
+label = "Open Gitland"
+checked = true
+
+# The self-contained publish output. `src` is the one path that does not expand
+# variables, so the release build stages the payload at a fixed location.
+[[dirs]]
+src = "dist/payload"
+dst = "${INSTALLDIR}"
+
+[[shortcuts]]
+target = "${INSTALLDIR}/gitland.exe"
+location = "${DESKTOP}/Gitland.lnk"
+name = "Gitland"
+app_id = "Fezcode.Gitland"
+icon = "${INSTALLDIR}/gitland.exe"
+label = "Create Desktop Shortcut"
+optional = true
+default = true
+
+[[shortcuts]]
+target = "${INSTALLDIR}/gitland.exe"
+location = "${STARTMENU}/Gitland.lnk"
+name = "Gitland"
+app_id = "Fezcode.Gitland"
+icon = "${INSTALLDIR}/gitland.exe"
+label = "Create Start Menu Entry"
+optional = true
+default = true
+
+# Forge also writes the Windows Apps & Features uninstall record automatically.
+# Keep app.id stable: that record is how Forge detects existing installations.
+[[registry]]
+hive = "HKCU"
+key = 'Software\fezcode\Gitland'
+value = "InstallDir"
+data = "${INSTALLDIR}"
+
+[[registry]]
+hive = "HKCU"
+key = 'Software\fezcode\Gitland'
+value = "Version"
+data = "${app.version}"
