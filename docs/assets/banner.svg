@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" fill="none">
+<title>Gitland — A clear view of your code</title>
+<desc>A Git branch rooted in layered land, on the charcoal Xcode Dark palette.</desc>
+<rect width="1280" height="400" rx="16" fill="#14161a"/>
+<path d="M0 348H1280" stroke="#30353f"/>
+<text x="66" y="82" font-family="Segoe UI,Arial,sans-serif" font-size="14" letter-spacing="4" fill="#a9b0bf">REVIEW / COMMIT / MERGE</text>
+<text x="60" y="205" font-family="Segoe UI,Arial,sans-serif" font-size="104" font-weight="600" letter-spacing="-5" fill="#eceef3">gitland</text>
+<text x="66" y="265" font-family="Segoe UI,Arial,sans-serif" font-size="27" fill="#a9b0bf">A clear view of your code.</text>
+<text x="66" y="380" font-family="Segoe UI,Arial,sans-serif" font-size="13" fill="#858d9d">NATIVE GIT WORKSPACE</text>
+<text x="1180" y="380" text-anchor="end" font-family="Segoe UI,Arial,sans-serif" font-size="13" fill="#858d9d">WINDOWS</text>
+<g transform="translate(812 36) scale(8)" stroke-linecap="round" stroke-linejoin="round">
+<path d="M3 24L16 30L29 24M3 28L16 34L29 28" stroke="#405d52" stroke-width=".65"/>
+<path d="M3 20L16 14L29 20L16 26Z" fill="#20352d" stroke="#92c7a9" stroke-width=".7"/>
+<path d="M7 20L16 16L25 20L16 24Z" stroke="#49695a" stroke-width=".5"/>
+<path d="M10 18V6M10 15C10 10 22 15 22 9V7" stroke="#8aa7ff" stroke-width="1"/>
+<g fill="#191b20" stroke="#a3bfff" stroke-width=".8"><circle cx="10" cy="5" r="1.6"/><circle cx="22" cy="6" r="1.6"/><circle cx="10" cy="18" r="1.6"/></g>
+</g>
+</svg>

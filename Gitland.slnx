@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Gitland.Core/Gitland.Core.csproj" />
+    <Project Path="src/Gitland.App/Gitland.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/"><Project Path="tests/Gitland.Tests/Gitland.Tests.csproj" /></Folder>
+  <Folder Name="/tools/"><Project Path="tools/Gitland.Preview/Gitland.Preview.csproj" /></Folder>
+</Solution>

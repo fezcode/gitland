@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Gitland.App/Gitland.App.csproj" />
+    <PackageReference Include="Avalonia.Headless" Version="11.3.0" />
+  </ItemGroup>
+</Project>

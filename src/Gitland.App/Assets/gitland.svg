@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <title>Gitland — a Git branch rooted in an island</title>
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 20L16 14L29 20L16 26Z" fill="#24392f" stroke="#92c7a9" stroke-width="1.4"/>
+    <path d="M3 24L16 30L29 24" stroke="#92c7a9" stroke-width="1.4"/>
+    <path d="M10 18V6M10 15C10 10 22 15 22 9V7" stroke="#8aa7ff" stroke-width="2.2"/>
+    <g fill="#191b20" stroke="#8aa7ff" stroke-width="1.7">
+      <circle cx="10" cy="5" r="2.5"/><circle cx="22" cy="6" r="2.5"/><circle cx="10" cy="18" r="2.5"/>
+    </g>
+  </g>
+</svg>
