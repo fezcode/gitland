@@ -169,6 +169,8 @@ public sealed partial class MainWindow {
             Add(row, file.IsConflict ? Text("!", 11, Amber) : (_mode is "changes" or "merge") && (stagedView == true || file.IsStaged && !file.IsUnstaged) ? Icon("check", Green, 12) : Text(!file.IsChanged ? "" : file.Index == '?' ? "A" : file.Label == "Deleted" ? "D" : "M", 10, color), 0, 2);
             var button = Button(file.Path, () => Run(() => SelectFile(file, stagedView))); button.Content = row; button.HorizontalContentAlignment = HorizontalAlignment.Stretch; button.HorizontalAlignment = HorizontalAlignment.Stretch;
             button.Classes.Add("selection-item"); button.Classes.Set("selected", active); button.Padding = new Thickness(12, 8); button.Background = active ? SelectedSurface : Brushes.Transparent; button.BorderBrush = Brushes.Transparent; button.BorderThickness = new Thickness(0); button.CornerRadius = new CornerRadius(3); ToolTip.SetTip(button, file.Path + " · " + (stagedView == true ? "Staged changes" : file.Label));
+            // Every row in every scope gets the same menu, built from this row's group and state.
+            button.ContextMenu = FileContextMenu(file, stagedView);
             _fileList.Children.Add(button);
         }
         if (_mode == "changes" && _fileScope == "changed") {

@@ -3,6 +3,7 @@ namespace Gitland.Core;
 /// <summary>What a destructive working-tree operation removed, and where it was saved first.</summary>
 /// <param name="RecoveryRef">The ref holding the tracked snapshot, or "" when there was nothing tracked to save.</param>
 /// <param name="BackupDirectory">The folder holding copies of deleted untracked files, or "" when none were deleted.</param>
+/// <remarks>Both are "" when the caller asked for a permanent removal, because nothing was kept.</remarks>
 public sealed record DiscardResult(string RecoveryRef, string BackupDirectory, int Files);
 
 public sealed partial class GitRepository {
@@ -51,23 +52,25 @@ public sealed partial class GitRepository {
         if (paths.Count == 0) throw new InvalidOperationException("Select at least one file to discard.");
     }
 
-    /// <summary>Throws away edits that were never staged, keeping whatever is already in the index.</summary>
-    public async Task<DiscardResult> DiscardUnstagedAsync(IReadOnlyList<string> paths) {
+    /// <summary>Throws away edits that were never staged, keeping whatever is already in the index.
+    /// With <paramref name="keepRecovery"/> false nothing is saved first and the work is unrecoverable.</summary>
+    public async Task<DiscardResult> DiscardUnstagedAsync(IReadOnlyList<string> paths, bool keepRecovery = true) {
         RequirePaths(paths);
         var (tracked, untracked) = await PartitionAsync(paths);
-        string recovery = await SnapshotTrackedAsync("discard");
-        string backup = await BackupUntrackedAsync(untracked);
+        string recovery = keepRecovery ? await SnapshotTrackedAsync("discard") : "";
+        string backup = keepRecovery ? await BackupUntrackedAsync(untracked) : "";
         if (tracked.Count > 0) await RunAsync(["restore", "--worktree", "--", .. tracked]);
         if (untracked.Count > 0) await RunAsync(["clean", "-f", "--", .. untracked]);
         return new(recovery, backup, paths.Count);
     }
 
-    /// <summary>Returns the files to their committed state, discarding staged and unstaged work alike.</summary>
-    public async Task<DiscardResult> DiscardFileAsync(IReadOnlyList<string> paths) {
+    /// <summary>Returns the files to their committed state, discarding staged and unstaged work alike.
+    /// With <paramref name="keepRecovery"/> false nothing is saved first and the work is unrecoverable.</summary>
+    public async Task<DiscardResult> DiscardFileAsync(IReadOnlyList<string> paths, bool keepRecovery = true) {
         RequirePaths(paths);
         var (tracked, untracked) = await PartitionAsync(paths);
-        string recovery = await SnapshotTrackedAsync("discard");
-        string backup = await BackupUntrackedAsync(untracked);
+        string recovery = keepRecovery ? await SnapshotTrackedAsync("discard") : "";
+        string backup = keepRecovery ? await BackupUntrackedAsync(untracked) : "";
         if (tracked.Count > 0) {
             // Without a commit there is nothing to restore from, so staged additions are simply
             // removed from the index and left in the working tree for the untracked sweep below.
@@ -78,37 +81,39 @@ public sealed partial class GitRepository {
         return new(recovery, backup, paths.Count);
     }
 
-    /// <summary>Deletes untracked files after copying them out.</summary>
-    public async Task<DiscardResult> CleanUntrackedAsync(IReadOnlyList<string> paths) {
+    /// <summary>Deletes untracked files, copying them out first unless a permanent removal was asked for.</summary>
+    public async Task<DiscardResult> CleanUntrackedAsync(IReadOnlyList<string> paths, bool keepRecovery = true) {
         RequirePaths(paths);
         var (tracked, untracked) = await PartitionAsync(paths);
         if (tracked.Count > 0) throw new InvalidOperationException("Only untracked files can be deleted this way. Discard tracked files instead.");
-        string backup = await BackupUntrackedAsync(untracked);
+        string backup = keepRecovery ? await BackupUntrackedAsync(untracked) : "";
         await RunAsync(["clean", "-f", "--", .. untracked]);
         return new("", backup, untracked.Count);
     }
 
-    /// <summary>Reverses a single hunk out of the working tree, leaving the rest of the file alone.</summary>
-    public async Task<DiscardResult> DiscardHunkAsync(string path, string expectedPatch, int index) {
+    /// <summary>Reverses a single hunk out of the working tree, leaving the rest of the file alone.
+    /// With <paramref name="keepRecovery"/> false nothing is saved first and the hunk is unrecoverable.</summary>
+    public async Task<DiscardResult> DiscardHunkAsync(string path, string expectedPatch, int index, bool keepRecovery = true) {
         ValidatePath(path);
         if (await ReadPatchAsync(path, false) != expectedPatch) throw new InvalidOperationException("The file or index changed. Refresh before discarding this hunk.");
         var hunks = ParseHunks(expectedPatch);
         if (index < 0 || index >= hunks.Count) throw new InvalidOperationException("This hunk is no longer available.");
-        string recovery = await SnapshotTrackedAsync("discard-hunk");
+        string recovery = keepRecovery ? await SnapshotTrackedAsync("discard-hunk") : "";
         // --check first so a hunk that no longer applies fails before anything is written.
         await RunAsync(["apply", "--reverse", "--check", "--whitespace=nowarn", "-"], hunks[index].Patch);
         await RunAsync(["apply", "--reverse", "--whitespace=nowarn", "-"], hunks[index].Patch);
         return new(recovery, "", 1);
     }
 
-    /// <summary>Returns the whole working tree to HEAD, optionally sweeping untracked files too.</summary>
-    public async Task<DiscardResult> DiscardEverythingAsync(bool includeUntracked) {
+    /// <summary>Returns the whole working tree to HEAD, optionally sweeping untracked files too.
+    /// With <paramref name="keepRecovery"/> false nothing is saved first and the work is unrecoverable.</summary>
+    public async Task<DiscardResult> DiscardEverythingAsync(bool includeUntracked, bool keepRecovery = true) {
         var state = await ReadStateAsync();
         var untracked = state.Changes.Where(c => c.Index == '?').Select(c => c.Path).ToArray();
         int files = state.Changes.Count(c => c.Index != '?') + (includeUntracked ? untracked.Length : 0);
         if (files == 0) throw new InvalidOperationException("There is nothing to discard.");
-        string recovery = await SnapshotTrackedAsync("discard-all");
-        string backup = includeUntracked ? await BackupUntrackedAsync(untracked) : "";
+        string recovery = keepRecovery ? await SnapshotTrackedAsync("discard-all") : "";
+        string backup = includeUntracked && keepRecovery ? await BackupUntrackedAsync(untracked) : "";
         if (await HasHead()) await RunAsync(["reset", "-q", "--hard", "HEAD", "--"]);
         else await RunAsync(["rm", "-q", "--cached", "-r", "-f", "--", "."]);
         if (includeUntracked) await RunAsync(["clean", "-f", "-d"]);

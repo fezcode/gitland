@@ -255,28 +255,47 @@ public sealed partial class MainWindow : Window {
             : staged
                 ? $"Throw away every change to {file.Path}, staged and unstaged, returning it to the last commit? Gitland saves a snapshot under Recovery first."
                 : $"Throw away the unstaged changes to {file.Path}? Anything already staged is kept, and Gitland saves a snapshot under Recovery first.";
-        if (!await ReviewAction(untracked ? "Delete this file?" : "Discard these changes?", detail, untracked ? "Delete file" : "Discard changes")) return;
-        var result = untracked ? await _repo.CleanUntrackedAsync([file.Path])
-            : staged ? await _repo.DiscardFileAsync([file.Path])
-            : await _repo.DiscardUnstagedAsync([file.Path]);
+        var (confirmed, permanent) = await ReviewActionWithOption(
+            untracked ? "Delete this file?" : "Discard these changes?", detail,
+            untracked ? "Delete file" : "Discard changes",
+            untracked ? "Delete permanently" : "Discard permanently",
+            untracked ? "Delete permanently - keep no copy" : "Discard permanently - keep no recovery snapshot",
+            untracked ? "Nothing is copied anywhere. This file cannot be brought back." : "No snapshot is taken. These changes cannot be brought back.");
+        if (!confirmed) return;
+        var result = untracked ? await _repo.CleanUntrackedAsync([file.Path], !permanent)
+            : staged ? await _repo.DiscardFileAsync([file.Path], !permanent)
+            : await _repo.DiscardUnstagedAsync([file.Path], !permanent);
         await Refresh();
-        _status.Text = untracked ? $"{file.Path} deleted · a copy is in {result.BackupDirectory}" : $"{file.Path} discarded · recoverable from Repository → Recovery";
+        _status.Text = permanent
+            ? $"{file.Path} removed permanently · nothing was kept"
+            : untracked ? $"{file.Path} deleted · a copy is in {result.BackupDirectory}" : $"{file.Path} discarded · recoverable from Repository → Recovery";
     }
     async Task DiscardHunk(int index) {
         if (_repo == null || _selected == null || _comparison == null) return;
-        if (!await ReviewAction("Discard this hunk?", $"Throw away hunk {index + 1} of {_selected.Path}? The rest of the file keeps its changes, and Gitland saves a snapshot under Recovery first.", "Discard hunk")) return;
-        await _repo.DiscardHunkAsync(_selected.Path, _comparison.Patch, index);
+        var (confirmed, permanent) = await ReviewActionWithOption(
+            "Discard this hunk?", $"Throw away hunk {index + 1} of {_selected.Path}? The rest of the file keeps its changes, and Gitland saves a snapshot under Recovery first.",
+            "Discard hunk", "Discard permanently",
+            "Discard permanently - keep no recovery snapshot",
+            "No snapshot is taken. This hunk cannot be brought back.");
+        if (!confirmed) return;
+        await _repo.DiscardHunkAsync(_selected.Path, _comparison.Patch, index, !permanent);
         await Refresh();
-        _status.Text = $"Hunk {index + 1} discarded · recoverable from Repository → Recovery";
+        _status.Text = permanent ? $"Hunk {index + 1} removed permanently · nothing was kept" : $"Hunk {index + 1} discarded · recoverable from Repository → Recovery";
     }
     async Task DiscardEverything(bool includeUntracked) {
         if (_repo == null) return;
-        if (!await ReviewAction("Discard all changes?", includeUntracked
+        var (confirmed, permanent) = await ReviewActionWithOption("Discard all changes?", includeUntracked
             ? "Return every tracked file to the last commit and delete untracked files? Gitland saves a snapshot under Recovery and copies untracked files into the recovery folder first."
-            : "Return every tracked file to the last commit? Untracked files are left alone, and Gitland saves a snapshot under Recovery first.", "Discard all")) return;
-        var result = await _repo.DiscardEverythingAsync(includeUntracked);
+            : "Return every tracked file to the last commit? Untracked files are left alone, and Gitland saves a snapshot under Recovery first.",
+            "Discard all", "Discard all permanently",
+            "Discard permanently - keep no recovery snapshot or copies",
+            "Nothing is saved anywhere. Every change being discarded here is gone for good.");
+        if (!confirmed) return;
+        var result = await _repo.DiscardEverythingAsync(includeUntracked, !permanent);
         await Refresh();
-        _status.Text = $"{result.Files} file{(result.Files == 1 ? "" : "s")} discarded · recoverable from Repository → Recovery";
+        _status.Text = permanent
+            ? $"{result.Files} file{(result.Files == 1 ? "" : "s")} removed permanently · nothing was kept"
+            : $"{result.Files} file{(result.Files == 1 ? "" : "s")} discarded · recoverable from Repository → Recovery";
     }
     async Task BlameSelected() {
         if (_repo == null || _selected == null) return;
@@ -309,6 +328,7 @@ public sealed partial class MainWindow : Window {
         _leftRef.Text = state.Refs.Contains("main") ? "main" : "HEAD~1"; _rightRef.Text = "HEAD";
         if (VisibleFiles().FirstOrDefault() is { } file) await SelectFile(file); else Empty("Your working tree is clean", "Edit a file to see changes here, or compare two revisions.");
         WatchRepository(repo.Root);
+        RememberRepository(repo.Root);
         _status.Text = repo.Root;
     }
     async Task Refresh() {

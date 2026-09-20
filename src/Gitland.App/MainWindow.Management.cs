@@ -115,6 +115,34 @@ public sealed partial class MainWindow {
         dialog.Content = body;
         await dialog.ShowDialog(this);
     }
+    /// <summary>A confirmation carrying one opt-in, used for removing work permanently. The confirm
+    /// button relabels while the option is ticked, so the button itself says what is about to happen
+    /// rather than leaving that to a checkbox the eye has already passed over.</summary>
+    async Task<(bool Confirmed, bool Permanent)> ReviewActionWithOption(string title, string details, string action, string permanentAction, string optionLabel, string optionWarning) {
+        var dialog = MakeDialog(title, details);
+        var body = (StackPanel)dialog.Content!;
+        var option = new CheckBox { Content = optionLabel };
+        var warning = Paragraph(optionWarning, Amber); warning.IsVisible = false;
+        var confirm = Button(action, () => { }, primary: true);
+        void Relabel() {
+            bool permanent = option.IsChecked == true;
+            warning.IsVisible = permanent;
+            string label = permanent ? permanentAction : action;
+            // Match Theme.Button's caption so the primary style keeps controlling the color.
+            var caption = Text(label, 12); caption.ClearValue(TextBlock.ForegroundProperty);
+            confirm.Content = caption;
+            Avalonia.Automation.AutomationProperties.SetName(confirm, label);
+        }
+        option.IsCheckedChanged += (_, _) => Relabel();
+        confirm.Click += (_, _) => dialog.Close(true);
+        body.Children.Add(option);
+        body.Children.Add(warning);
+        var buttons = Row(Button("Cancel", () => dialog.Close(false)), confirm);
+        buttons.HorizontalAlignment = HorizontalAlignment.Right;
+        body.Children.Add(buttons);
+        bool confirmed = await dialog.ShowDialog<bool>(this);
+        return (confirmed, confirmed && option.IsChecked == true);
+    }
     async Task<bool> ReviewAction(string title, string details, string action) {
         var dialog = MakeDialog(title, details);
         ((StackPanel)dialog.Content!).Children.Add(Row(Button("Cancel", () => dialog.Close(false)), Button(action, () => dialog.Close(true), primary: true)));

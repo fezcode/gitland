@@ -63,6 +63,21 @@ Check(discard.Length == 1, "Working changes offers a discard action beside stagi
 Check(discard[0].IsVisible, "The discard action is visible while reviewing working changes.");
 Check(!discard[0].IsEnabled, "Discard stays disabled without a repository, so the preview fixture cannot lose work.");
 Check(Buttons("Stage file").Concat(Buttons("Unstage file")).Count() == 1, "Staging keeps its own action beside discard.");
+
+// Every row in the list carries its own menu, and the menu is built from that row's state.
+MenuItem[] RowMenu(string path) {
+    var row = Buttons(path).First();
+    Check(row.ContextMenu != null, "File row " + path + " has a context menu.");
+    return row.ContextMenu!.Items.OfType<MenuItem>().ToArray();
+}
+string[] RowMenuLabels(string path) => RowMenu(path).Select(i => (string?)i.Header ?? "").ToArray();
+var changedMenu = RowMenuLabels("src/core/diff-service.ts");
+Check(changedMenu.Contains("Stage file") && changedMenu.Contains("Discard changes…"), "A changed file's menu offers staging and discarding.");
+Check(changedMenu.Contains("Blame") && changedMenu.Contains("History of this file") && changedMenu.Contains("Copy path") && changedMenu.Contains("Reveal in File Explorer"), "Every file's menu ends with the actions any file supports.");
+Check(RowMenu("src/core/diff-service.ts").All(i => !i.IsEnabled || i.Header is "Copy path" or "Copy file name"), "Without a repository only the clipboard actions stay enabled.");
+var conflictMenu = RowMenuLabels("src/core/merge.ts");
+Check(conflictMenu.Contains("Open merge editor") && conflictMenu.Contains("Take ours (keep this branch)") && conflictMenu.Contains("Take theirs (keep incoming)"), "A conflicted file's menu offers resolution instead of staging.");
+Check(!conflictMenu.Contains("Stage file"), "A conflicted file is not offered staging, which would skip resolving it.");
 Click("Gitland menu");
 var appMenu = Buttons("Gitland menu").Single().ContextMenu!;
 // Naming the groups rather than counting them says which menu went missing when this fails.
@@ -375,6 +390,11 @@ async Task ExerciseRepository() {
     Check(Buttons("Start bisect…").Single().IsEnabled && Buttons("Add submodule…").Single().IsEnabled && Buttons("Apply patch…").Single().IsEnabled, "Advanced offers bisect, submodules and patches against a real repository.");
     Save("repository-advanced.png");
     Click("History"); await WaitForAction(); Click("Working changes"); await WaitForAction();
+
+    // Opening a repository is what puts it on the welcome screen, so it is checked after a real open.
+    var remembered = Gitland.App.GitlandApplication.Preferences.RecentRepositories ?? [];
+    Check(remembered.Contains(root), "Opening a repository records it as recently opened.");
+    Check(remembered.Count <= UserSettings.MaxRecent, "The recent list stays capped.");
     await repo.Git("checkout", "-b", "incoming"); await File.WriteAllTextAsync(Path.Combine(root, "source.txt"), "incoming\n", new UTF8Encoding(false)); await repo.Git("add", "."); await repo.Git("commit", "-m", "Incoming");
     await repo.Git("checkout", "main"); await File.WriteAllTextAsync(Path.Combine(root, "source.txt"), "ours\n", new UTF8Encoding(false)); await repo.Git("add", "."); await repo.Git("commit", "-m", "Ours");
     try { await repo.Git("merge", "incoming"); } catch (InvalidOperationException) { }
