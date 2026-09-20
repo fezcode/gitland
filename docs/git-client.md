@@ -1,4 +1,4 @@
-# Gitland 0.8.1 — comparison and repository management
+# Gitland 0.9.1 — comparison and repository management
 
 ## Three-way comparison
 
@@ -26,9 +26,17 @@ Worktrees create separate working folders at a selected revision, detached or on
 
 ## History changes and recovery
 
-Merge, rebase, cherry-pick, and revert require a clean checkout and the same HEAD that was reviewed. An operation that stops for conflicts appears in Repository with Continue and Abort. Resolve and stage the conflicts before continuing. Abort returns to the operation's original state and discards conflict-resolution edits. Merge commits require an explicit mainline for cherry-pick/revert in Git; this release does not yet expose that option.
+Merge, rebase, cherry-pick, and revert require a clean checkout and the same HEAD that was reviewed. An operation that stops for conflicts appears in Repository with Continue and Abort. Resolve and stage the conflicts before continuing. Abort returns to the operation's original state and discards conflict-resolution edits. Reverting a merge commit asks which parent's history to keep, and cherry-pick accepts a run of commits applied in order.
 
-Message-only amend leaves staged content for a later commit. Soft reset keeps the index and worktree; mixed reset keeps working files and resets the index. Both move local history and can diverge from already-published branches. There is no hard reset or implicit force-push.
+Amend either rewrites the message alone, leaving staged content for a later commit, or folds the current index into the last commit. Soft reset keeps the index and worktree; mixed reset keeps working files and resets the index; hard reset also replaces the working tree. All move local history and can diverge from already-published branches, so pushing afterwards needs a forced push, which uses `--force-with-lease` and refuses to overwrite commits the remote gained since your last fetch.
+
+Interactive rebase reads the commits between a revision and HEAD as a plan. Reorder the rows, or set each to pick, reword, edit, squash, fixup, or drop. Gitland validates the plan before running it — a plan that drops everything, or that opens with a squash, is refused rather than started and abandoned mid-way. The plan is handed to Git directly, so no editor window opens, and a reworded message is applied without prompting.
+
+## Discarding work
+
+Discard is available for a single hunk, a file, or the whole working tree, and untracked files can be deleted. Every one of these is destructive to uncommitted work, so each takes a snapshot first: tracked content becomes a commit recorded under Recovery, and untracked files are copied into the Git directory's `gitland-backups` folder before deletion. Discarding a file from the unstaged view keeps what is already staged; discarding from the staged view returns the file to its last commit.
+
+These snapshots are ordinary Git objects and ordinary files. They survive Gitland restarts, but `git gc` prunes unreachable recovery refs on its own schedule, and deleting the repository deletes both. Treat discard as recoverable for the session, not as an archive.
 
 Recovery references keep original objects reachable before history operations, tag edits/deletion, branch deletion, and stash removal. Restore a branch to inspect older commits, or restore saved stash files. These are durable Git references, not automatic reversal of all filesystem/configuration effects. Gitland also retains the existing per-file merge-save backups under the Git directory's `gitland-backups` folder.
 
@@ -36,7 +44,9 @@ Recovery references keep original objects reachable before history operations, t
 
 Real-repository tests cover CRUD, stale selection checks, dirty worktree protection, clone, staged/unstaged/untracked stash restoration, merge/rebase/cherry-pick/revert conflicts and abort, reset, amend, and pinned three-way reads. Native offscreen tests exercise forms, alignment, colors, navigation, compact layout, and existing commit/merge workflows. Network publishing remains dependent on the user's Git/GitHub credentials; validation uses local repositories and does not create hosted resources.
 
-This release does not claim full Tower or IntelliJ parity. Interactive rebase plans, submodule and LFS interfaces, blame, hosting providers beyond GitHub, and arbitrary binary comparison need further work.
+This release closes the gaps measured against Fork, Tower, GitKraken, SourceTree, and VS Code's SCM: discard at every granularity, untracked deletion, hard reset, full amend, hunk unstaging, forced push with lease, pull modes, fetch pruning, file history and searched history, blame, interactive rebase, reflog, bisect, submodules, LFS patterns, hooks, signature verification, patch export/apply, archives, and GitHub Enterprise hosts.
+
+Remaining work: hosting providers beyond GitHub, arbitrary binary comparison, and structural/delete-modify conflict resolution. Interactive rebase depends on the POSIX shell Git for Windows ships, which Gitland already requires.
 
 ## Product and command references
 

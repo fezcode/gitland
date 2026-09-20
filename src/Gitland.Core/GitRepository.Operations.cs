@@ -151,10 +151,15 @@ public sealed partial class GitRepository {
         string target = await ResolveRef(revision); string recovery = await RecoveryRef(expectedHead, "reset");
         await Git("reset", keepStaged ? "--soft" : "--mixed", target, "--"); return recovery;
     }
-    public async Task AmendMessageAsync(string message, string expectedHead) {
+    /// <summary>Rewrites the last commit. With <paramref name="includeStaged"/> the current index is
+    /// folded into it; without, --only amends the message and leaves staged work for the next commit.</summary>
+    public async Task AmendMessageAsync(string message, string expectedHead, bool includeStaged = false) {
         if (string.IsNullOrWhiteSpace(message)) throw new InvalidOperationException("Write a commit message.");
         await CheckHead(expectedHead); if (await OperationAsync() != "") throw new InvalidOperationException("Finish the current operation first.");
-        await RecoveryRef(expectedHead, "amend"); await RunAsync(["commit", "--amend", "--only", "--file=-"], message, timeout: 120);
+        if (includeStaged && (await ReadStateAsync()).Changes.Any(c => c.IsConflict)) throw new InvalidOperationException("Resolve every conflict before amending.");
+        await RecoveryRef(expectedHead, "amend");
+        string[] scope = includeStaged ? [] : ["--only"];
+        await RunAsync(["commit", "--amend", .. scope, "--file=-"], message, timeout: 120);
     }
     public async Task<string> CommitDetailsAsync(string revision) => await Git("show", "--format=fuller", "--stat", "--no-ext-diff", "--no-textconv", await ResolveRef(revision), "--");
     public async Task<string> CommitMessageAsync(string revision) => await Git("log", "-1", "--format=%B", await ResolveRef(revision));

@@ -46,6 +46,7 @@ public sealed partial class MainWindow : Window {
     readonly CheckBox _foldCheck = new() { Content = "Changes only", FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
     readonly CheckBox _spaceCheck = new() { Content = "Ignore whitespace", FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
     readonly Button _stageButton;
+    readonly Button _discardButton;
     readonly Button _splitButton, _unifiedButton;
     readonly Grid _diffRoot;
     string? _externalLeft, _externalRight;
@@ -75,13 +76,14 @@ public sealed partial class MainWindow : Window {
         _foldCheck.IsCheckedChanged += (_, _) => { _fold = _foldCheck.IsChecked == true; RenderDiff(); };
         _spaceCheck.IsCheckedChanged += (_, _) => { _whitespace = _spaceCheck.IsChecked == true; Run(RecalculateDiff); };
         _stageButton = Button("Stage file", () => Run(StageSelected), "check", true);
+        _discardButton = Button("Discard file", () => Run(DiscardSelected), "trash");
         _resolveFileButton = Button("Open merge editor", () => Run(OpenSelectedMerge), "merge", true); _resolveFileButton.IsVisible = false;
         var titleBar = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(18, 10) };
         _fileTitle.FontSize = 12; _fileTitle.FontWeight = FontWeight.Normal;
         _addedStats.Name = "DiffAdditions"; _removedStats.Name = "DiffDeletions";
         ToolTip.SetTip(_addedStats, "Added lines"); ToolTip.SetTip(_removedStats, "Deleted lines");
         titleBar.Children.Add(Row(Icon("file", Faint, 14), _fileTitle, _addedStats, _removedStats));
-        var fileActions = Row(IconButton("Copy right-hand source", () => Run(CopyRight), "arrow-out"), _stageButton, _resolveFileButton);
+        var fileActions = Row(IconButton("Copy right-hand source", () => Run(CopyRight), "arrow-out"), _discardButton, _stageButton, _resolveFileButton);
         Grid.SetColumn(fileActions, 1); titleBar.Children.Add(fileActions);
         var toolbar = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), RowDefinitions = new RowDefinitions("Auto,Auto"), Margin = new Thickness(16, 0, 16, 10) };
         _splitButton = Button("Side by side", () => SetUnified(false)); _splitButton.Classes.Add("primary");
@@ -171,6 +173,12 @@ public sealed partial class MainWindow : Window {
         _comparison = comparison; _stageButton.IsVisible = _mode == "changes";
         _stageButton.Content = Row(Icon(staged ? "close" : "check"), Text(!file.IsChanged ? "Unchanged" : _repo == null ? "Read only" : staged ? "Unstage file" : "Stage file")); _stageButton.IsEnabled = _repo != null && file.IsChanged;
         Avalonia.Automation.AutomationProperties.SetName(_stageButton, staged ? "Unstage file" : "Stage file");
+        // Discarding is offered wherever staging is, so the way out of a change sits beside the way in.
+        _discardButton.IsVisible = _mode == "changes";
+        _discardButton.Content = Row(Icon("trash"), Text(file.Index == '?' ? "Delete file" : "Discard file"));
+        _discardButton.IsEnabled = _repo != null && file.IsChanged;
+        ToolTip.SetTip(_discardButton, file.Index == '?' ? "Delete this untracked file, keeping a copy under Recovery" : "Throw away this file's changes, keeping a snapshot under Recovery");
+        Avalonia.Automation.AutomationProperties.SetName(_discardButton, file.Index == '?' ? "Delete file" : "Discard file");
         await RecalculateDiff();
         _status.Text = _repo == null ? "Open, clone, or create a repository to get started" : file.Path + " · " + (staged ? "Staged changes" : "Working tree changes");
     }
@@ -208,8 +216,13 @@ public sealed partial class MainWindow : Window {
         }
         foreach (var hunk in hunks) {
             var jump = Button($"Hunk {hunk.Index + 1}", () => GoToLine(hunk.RightLine));
-            var stage = Button("Stage", () => Run(async () => { await _repo!.StageHunkAsync(_selected!.Path, _comparison!.Patch, hunk.Index); await Refresh(); _status.Text = $"Hunk {hunk.Index + 1} staged."; }), "check");
-            _hunkActions.Children.Add(Row(jump, stage));
+            bool stagedView = _comparison!.RightLabel == "Index · staged";
+            var stage = stagedView
+                ? Button("Unstage", () => Run(async () => { await _repo!.UnstageHunkAsync(_selected!.Path, _comparison!.Patch, hunk.Index); await Refresh(); _status.Text = $"Hunk {hunk.Index + 1} unstaged."; }), "close")
+                : Button("Stage", () => Run(async () => { await _repo!.StageHunkAsync(_selected!.Path, _comparison!.Patch, hunk.Index); await Refresh(); _status.Text = $"Hunk {hunk.Index + 1} staged."; }), "check");
+            var actions = Row(jump, stage);
+            if (!stagedView) actions.Children.Add(Button("Discard", () => Run(() => DiscardHunk(hunk.Index)), "trash"));
+            _hunkActions.Children.Add(actions);
         }
     }
     void UpdateViewport() {
@@ -233,6 +246,52 @@ public sealed partial class MainWindow : Window {
         if (_comparison?.RightLabel == "Index · staged") await _repo.UnstageFileAsync(_selected.Path, _selected.OldPath); else await _repo.StageFileAsync(_selected.Path);
         await Refresh();
     }
+    async Task DiscardSelected() {
+        if (_repo == null || _selected is not { IsChanged: true } file) return;
+        bool untracked = file.Index == '?';
+        bool staged = _comparison?.RightLabel == "Index · staged";
+        string detail = untracked
+            ? $"Delete {file.Path}? It is not tracked by Git, so Gitland copies it into the repository's recovery folder first."
+            : staged
+                ? $"Throw away every change to {file.Path}, staged and unstaged, returning it to the last commit? Gitland saves a snapshot under Recovery first."
+                : $"Throw away the unstaged changes to {file.Path}? Anything already staged is kept, and Gitland saves a snapshot under Recovery first.";
+        if (!await ReviewAction(untracked ? "Delete this file?" : "Discard these changes?", detail, untracked ? "Delete file" : "Discard changes")) return;
+        var result = untracked ? await _repo.CleanUntrackedAsync([file.Path])
+            : staged ? await _repo.DiscardFileAsync([file.Path])
+            : await _repo.DiscardUnstagedAsync([file.Path]);
+        await Refresh();
+        _status.Text = untracked ? $"{file.Path} deleted · a copy is in {result.BackupDirectory}" : $"{file.Path} discarded · recoverable from Repository → Recovery";
+    }
+    async Task DiscardHunk(int index) {
+        if (_repo == null || _selected == null || _comparison == null) return;
+        if (!await ReviewAction("Discard this hunk?", $"Throw away hunk {index + 1} of {_selected.Path}? The rest of the file keeps its changes, and Gitland saves a snapshot under Recovery first.", "Discard hunk")) return;
+        await _repo.DiscardHunkAsync(_selected.Path, _comparison.Patch, index);
+        await Refresh();
+        _status.Text = $"Hunk {index + 1} discarded · recoverable from Repository → Recovery";
+    }
+    async Task DiscardEverything(bool includeUntracked) {
+        if (_repo == null) return;
+        if (!await ReviewAction("Discard all changes?", includeUntracked
+            ? "Return every tracked file to the last commit and delete untracked files? Gitland saves a snapshot under Recovery and copies untracked files into the recovery folder first."
+            : "Return every tracked file to the last commit? Untracked files are left alone, and Gitland saves a snapshot under Recovery first.", "Discard all")) return;
+        var result = await _repo.DiscardEverythingAsync(includeUntracked);
+        await Refresh();
+        _status.Text = $"{result.Files} file{(result.Files == 1 ? "" : "s")} discarded · recoverable from Repository → Recovery";
+    }
+    async Task BlameSelected() {
+        if (_repo == null || _selected == null) return;
+        var lines = await _repo.BlameAsync(_selected.Path);
+        if (lines.Count == 0) { _status.Text = "This file has no committed history to blame."; return; }
+        await ShowListDialog("Blame · " + _selected.Path,
+            lines.Select(l => $"{l.ShortHash}  {l.Date}  {l.Author,-16}  {l.Number,5}  {l.Text}").ToArray());
+    }
+    async Task FileHistorySelected() {
+        if (_repo == null || _selected == null) return;
+        var commits = await _repo.ReadHistoryAsync(new(Path: _selected.Path));
+        if (commits.Count == 0) { _status.Text = "No commits have touched this file yet."; return; }
+        await ShowListDialog("History · " + _selected.Path,
+            commits.Select(c => $"{c.ShortHash}  {c.Date[..Math.Min(10, c.Date.Length)]}  {c.Author,-16}  {c.Subject}").ToArray());
+    }
     async Task OpenSelectedMerge() {
         if (_selected is not { IsConflict: true } file || !await MayLeaveMerge()) return;
         _mode = "merge"; RenderNavigation(); RenderContext(); RenderFiles(); await LoadMerge(file);
@@ -249,6 +308,7 @@ public sealed partial class MainWindow : Window {
         _repoName.Text = System.IO.Path.GetFileName(repo.Root); _branch.Text = state.Branch; RenderNavigation(); RenderContext(); RenderFiles();
         _leftRef.Text = state.Refs.Contains("main") ? "main" : "HEAD~1"; _rightRef.Text = "HEAD";
         if (VisibleFiles().FirstOrDefault() is { } file) await SelectFile(file); else Empty("Your working tree is clean", "Edit a file to see changes here, or compare two revisions.");
+        WatchRepository(repo.Root);
         _status.Text = repo.Root;
     }
     async Task Refresh() {

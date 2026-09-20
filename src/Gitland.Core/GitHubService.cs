@@ -8,15 +8,23 @@ public sealed record GitHubReleasePlan(string Repository, string Tag, string Com
 public sealed record GitHubRelease(string Tag, string Name, bool Draft, bool Prerelease, string? PublishedAt);
 public sealed record PublishedRepository(string Url, string RemoteUrl, bool Pushed);
 
-public sealed class GitHubService(ICommandRunner? runner = null) {
+public sealed class GitHubService(ICommandRunner? runner = null, string host = "github.com") {
     readonly ICommandRunner _runner = runner ?? new CommandRunner();
+    /// <summary>The GitHub host. Enterprise installations use their own domain throughout.</summary>
+    public string Host { get; } = ValidateHost(host);
+    static string ValidateHost(string value) {
+        value = value.Trim().ToLowerInvariant();
+        if (value.Length == 0) return "github.com";
+        if (!Regex.IsMatch(value, @"\A[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+\z")) throw new InvalidOperationException("Enter a GitHub host name, such as github.example.com.");
+        return value;
+    }
     async Task<string> Gh(string directory, string[] args, string? input = null) {
-        var result = await _runner.RunAsync(new("gh", directory, args, input, 120));
+        var result = await _runner.RunAsync(new("gh", directory, args, input, 120, new Dictionary<string, string> { ["GH_HOST"] = Host }));
         if (result.ExitCode != 0) throw new CommandFailedException(string.IsNullOrWhiteSpace(result.Error) ? result.Output.Trim() : result.Error.Trim(), result.ExitCode);
         return result.Output.Trim();
     }
     public async Task<string> ConnectedUserAsync(string directory) {
-        string user = await Gh(directory, ["api", "--hostname", "github.com", "user", "--jq", ".login"]);
+        string user = await Gh(directory, ["api", "--hostname", Host, "user", "--jq", ".login"]);
         ValidateOwner(user); return user;
     }
     static void ValidateOwner(string owner) {
@@ -27,9 +35,12 @@ public sealed class GitHubService(ICommandRunner? runner = null) {
         if (!Regex.IsMatch(name, @"\A[A-Za-z0-9_.-]{1,100}\z") || name is "." or "..") throw new InvalidOperationException("Enter a GitHub repository name using letters, digits, dots, hyphens, or underscores.");
         return owner + "/" + name;
     }
-    public static string? RepositoryFromRemote(string url) {
-        if (url.StartsWith("git@github.com:", StringComparison.OrdinalIgnoreCase)) url = "https://github.com/" + url[15..];
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || !uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) || uri.Query.Length != 0 || uri.Fragment.Length != 0 || !uri.IsDefaultPort || uri.Scheme is not ("https" or "ssh")) return null;
+    /// <summary>Reads owner/name out of a remote URL for this service's host.</summary>
+    public string? RepositoryOnHost(string url) => RepositoryFromRemote(url, Host);
+    public static string? RepositoryFromRemote(string url) => RepositoryFromRemote(url, "github.com");
+    public static string? RepositoryFromRemote(string url, string host) {
+        if (url.StartsWith("git@" + host + ":", StringComparison.OrdinalIgnoreCase)) url = $"https://{host}/" + url[(5 + host.Length)..];
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || !uri.Host.Equals(host, StringComparison.OrdinalIgnoreCase) || uri.Query.Length != 0 || uri.Fragment.Length != 0 || !uri.IsDefaultPort || uri.Scheme is not ("https" or "ssh")) return null;
         if (uri.Scheme == "https" && uri.UserInfo.Length > 0) return null;
         var path = uri.AbsolutePath.Trim('/'); if (path.EndsWith(".git")) path = path[..^4];
         var parts = path.Split('/'); if (parts.Length != 2) return null;
@@ -43,7 +54,7 @@ public sealed class GitHubService(ICommandRunner? runner = null) {
         if (plan.PushBranch && plan.Head == null) throw new InvalidOperationException("Create an initial commit before publishing a branch, or turn off Push current branch.");
         if (plan.PushBranch) GitRepository.ValidateRefName(plan.Branch);
         await Gh(repo.Root, ["repo", "create", fullName, plan.Private ? "--private" : "--public", "--description", plan.Description]);
-        string url = "https://github.com/" + fullName, remote = url + ".git";
+        string url = $"https://{Host}/" + fullName, remote = url + ".git";
         try { await repo.AddRemoteAsync("origin", remote); }
         catch (Exception e) { throw new InvalidOperationException($"Created {url}, but origin could not be added: {e.Message} Add this remote to continue; the GitHub repository has been kept.", e); }
         if (plan.PushBranch) {
@@ -54,7 +65,7 @@ public sealed class GitHubService(ICommandRunner? runner = null) {
     }
     public async Task<IReadOnlyList<GitHubRelease>> ListReleasesAsync(string directory, string repository) {
         ValidateRepository(repository);
-        var json = await Gh(directory, ["release", "list", "--repo", "github.com/" + repository, "--limit", "20", "--json", "tagName,name,isDraft,isPrerelease,publishedAt"]);
+        var json = await Gh(directory, ["release", "list", "--repo", Host + "/" + repository, "--limit", "20", "--json", "tagName,name,isDraft,isPrerelease,publishedAt"]);
         using var document = JsonDocument.Parse(json);
         return document.RootElement.EnumerateArray().Select(r => new GitHubRelease(r.GetProperty("tagName").GetString()!, r.GetProperty("name").GetString() ?? "", r.GetProperty("isDraft").GetBoolean(), r.GetProperty("isPrerelease").GetBoolean(), r.GetProperty("publishedAt").GetString())).ToArray();
     }
@@ -63,14 +74,14 @@ public sealed class GitHubService(ICommandRunner? runner = null) {
         ValidateRepository(plan.Repository); GitRepository.ValidateRefName(plan.Tag);
         if (string.IsNullOrWhiteSpace(plan.Title)) throw new InvalidOperationException("Give the release a title.");
         var origin = (await repo.ReadRemotesAsync()).SingleOrDefault(r => r.Name == "origin");
-        if (origin == null || RepositoryFromRemote(origin.Url) != plan.Repository) throw new InvalidOperationException("Origin changed or does not match this GitHub repository. Refresh before creating the release.");
+        if (origin == null || RepositoryFromRemote(origin.Url, Host) != plan.Repository) throw new InvalidOperationException("Origin changed or does not match this GitHub repository. Refresh before creating the release.");
         if (await repo.ResolveRef("refs/tags/" + plan.Tag) != plan.Commit) throw new InvalidOperationException("The local tag changed. Refresh before creating this release.");
         string? remoteCommit = await repo.RemoteTagCommitAsync("origin", plan.Tag);
         if (remoteCommit == null) throw new InvalidOperationException("Push this tag first, then create the release. No release was created.");
         if (remoteCommit != plan.Commit) throw new InvalidOperationException("The GitHub tag points to a different commit. Resolve that mismatch before releasing.");
-        var args = new List<string> { "release", "create", plan.Tag, "--repo", "github.com/" + plan.Repository, "--verify-tag", "--title", plan.Title, "--notes-file", "-" };
+        var args = new List<string> { "release", "create", plan.Tag, "--repo", Host + "/" + plan.Repository, "--verify-tag", "--title", plan.Title, "--notes-file", "-" };
         if (plan.Draft) args.Add("--draft"); if (plan.Prerelease) args.Add("--prerelease"); if (plan.GenerateNotes) args.Add("--generate-notes");
         string output = await Gh(repo.Root, args.ToArray(), plan.Notes);
-        return Uri.TryCreate(output, UriKind.Absolute, out var uri) && uri.Scheme == "https" && uri.Host == "github.com" ? output : "https://github.com/" + plan.Repository + "/releases";
+        return Uri.TryCreate(output, UriKind.Absolute, out var uri) && uri.Scheme == "https" && uri.Host == Host ? output : $"https://{Host}/" + plan.Repository + "/releases";
     }
 }

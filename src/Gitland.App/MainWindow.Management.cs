@@ -96,6 +96,21 @@ public sealed partial class MainWindow {
         body.Children.Add(footer); dialog.Content = new ScrollViewer { Content = body, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         await dialog.ShowDialog(this);
     }
+    /// <summary>Shows fixed-width rows - blame and file history are columnar and must stay aligned.</summary>
+    async Task ShowListDialog(string title, IReadOnlyList<string> rows) {
+        var dialog = new Window { Title = title, Width = 980, Height = 640, CanResize = true, Background = Ground, Foreground = Ink, FontFamily = Sans, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var list = new SelectableTextBlock {
+            Text = string.Join(Environment.NewLine, rows), FontFamily = Mono, FontSize = 12,
+            Foreground = Ink, Margin = new Thickness(20), TextWrapping = TextWrapping.NoWrap,
+        };
+        var close = Button("Close", () => dialog.Close(), primary: true);
+        close.HorizontalAlignment = HorizontalAlignment.Right; close.Margin = new Thickness(0, 0, 20, 16);
+        var body = new DockPanel();
+        DockPanel.SetDock(close, Dock.Bottom); body.Children.Add(close);
+        body.Children.Add(new ScrollViewer { Content = list, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        dialog.Content = body;
+        await dialog.ShowDialog(this);
+    }
     async Task<bool> ReviewAction(string title, string details, string action) {
         var dialog = MakeDialog(title, details);
         ((StackPanel)dialog.Content!).Children.Add(Row(Button("Cancel", () => dialog.Close(false)), Button(action, () => dialog.Close(true), primary: true)));

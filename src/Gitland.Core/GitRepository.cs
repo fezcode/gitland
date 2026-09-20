@@ -34,10 +34,10 @@ public sealed partial class GitRepository {
     }
 
     public async Task<string> Git(params string[] args) => await RunAsync(args);
-    async Task<CommandResult> RunResultAsync(string[] args, string? input = null, int timeout = 30) =>
-        await _runner.RunAsync(new("git", Root, ["--literal-pathspecs", "-c", "core.quotepath=false", ..args], input, timeout));
-    async Task<string> RunAsync(string[] args, string? input = null, bool allowOne = false, int timeout = 30) {
-        var result = await RunResultAsync(args, input, timeout);
+    async Task<CommandResult> RunResultAsync(string[] args, string? input = null, int timeout = 30, IReadOnlyDictionary<string, string>? environment = null) =>
+        await _runner.RunAsync(new("git", Root, ["--literal-pathspecs", "-c", "core.quotepath=false", ..args], input, timeout, environment));
+    async Task<string> RunAsync(string[] args, string? input = null, bool allowOne = false, int timeout = 30, IReadOnlyDictionary<string, string>? environment = null) {
+        var result = await RunResultAsync(args, input, timeout, environment);
         if (result.ExitCode != 0 && !(allowOne && result.ExitCode == 1)) throw new CommandFailedException(string.IsNullOrWhiteSpace(result.Error) ? $"Git exited with code {result.ExitCode}. {result.Output.Trim()}" : result.Error.Trim(), result.ExitCode);
         return result.Output;
     }
@@ -165,6 +165,16 @@ public sealed partial class GitRepository {
         if (index < 0 || index >= hunks.Count) throw new InvalidOperationException("This hunk is no longer available.");
         await RunAsync(["apply", "--cached", "--check", "--whitespace=nowarn", "-"], hunks[index].Patch);
         await RunAsync(["apply", "--cached", "--whitespace=nowarn", "-"], hunks[index].Patch);
+    }
+    /// <summary>Takes a single hunk back out of the index, leaving the working tree untouched.</summary>
+    public async Task UnstageHunkAsync(string path, string expectedPatch, int index) {
+        ValidatePath(path);
+        // The staged patch is the one being reversed, so it is what must not have moved.
+        if (await ReadPatchAsync(path, true) != expectedPatch) throw new InvalidOperationException("The file or index changed. Refresh before unstaging this hunk.");
+        var hunks = ParseHunks(expectedPatch);
+        if (index < 0 || index >= hunks.Count) throw new InvalidOperationException("This hunk is no longer available.");
+        await RunAsync(["apply", "--cached", "--reverse", "--check", "--whitespace=nowarn", "-"], hunks[index].Patch);
+        await RunAsync(["apply", "--cached", "--reverse", "--whitespace=nowarn", "-"], hunks[index].Patch);
     }
     public async Task<MergeFile> ReadMergeAsync(string path) {
         var snapshot = await ReadWorkingFile(path);

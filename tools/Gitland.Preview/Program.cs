@@ -53,9 +53,18 @@ Check(((SolidColorBrush)additions.Foreground!).Color != ((SolidColorBrush)deleti
 Click("Unified");
 Check(canvas.Unified && canvas.Rows.All(r => r.Kind != Gitland.Core.ChangeKind.Modified), "Unified view renders independent removed and added lines.");
 Click("Side by side"); Check(!canvas.Unified, "Split view restored.");
+
+// The way out of a change must sit beside the way in, and must never be reachable read-only.
+var discard = Buttons("Discard file").Concat(Buttons("Delete file")).ToArray();
+Check(discard.Length == 1, "Working changes offers a discard action beside staging.");
+Check(discard[0].IsVisible, "The discard action is visible while reviewing working changes.");
+Check(!discard[0].IsEnabled, "Discard stays disabled without a repository, so the preview fixture cannot lose work.");
+Check(Buttons("Stage file").Concat(Buttons("Unstage file")).Count() == 1, "Staging keeps its own action beside discard.");
 Click("Gitland menu");
 var appMenu = Buttons("Gitland menu").Single().ContextMenu!;
-Check(appMenu.IsOpen && appMenu.Items.Count == 4, "The local Gitland menu opens independently of Hisashi.");
+// Naming the groups rather than counting them says which menu went missing when this fails.
+var appGroups = appMenu.Items.OfType<MenuItem>().Select(item => (string?)item.Header).ToArray();
+Check(appMenu.IsOpen && appGroups.SequenceEqual(["File", "View", "Git", "Changes", "Settings"]), "The local Gitland menu opens independently of Hisashi.");
 var viewMenu = appMenu.Items.OfType<MenuItem>().Single(item => (string?)item.Header == "View");
 appMenu.Close(); viewMenu.Items.OfType<MenuItem>().First().RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); Pump();
 Check(Buttons("LICENSE").Length == 1, "Local menu actions use the working file-filter command."); Click("Changed files");

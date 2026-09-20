@@ -4,11 +4,11 @@
 
 A native Git client for Windows, built around readable diffs, three-way review, and an editable merge result. Clockt’s **Xcode Dark** palette, configurable typography, and a resizable workspace keep your code at the center.
 
-[**Download for Windows x64**](https://github.com/fezcode/gitland/releases/latest) · [Release notes](docs/releases/0.9.1.md) · [Workflow guide](docs/git-client.md)
+[**Download for Windows x64**](https://github.com/fezcode/gitland/releases/latest) · [Release notes](docs/releases/0.10.0.md) · [Workflow guide](docs/git-client.md)
 
 ## Get started
 
-1. Download `Gitland-Setup-0.9.1.exe` from Releases and run it.
+1. Download `Gitland-Setup-0.10.0.exe` from Releases and run it.
 2. Run `gitland.exe`.
 3. Choose **Open repository**, **Clone repository**, or **Create repository**.
 
@@ -25,7 +25,8 @@ You can also launch a repository directly:
 - **Working changes:** separate Unstaged, Staged, and Conflicts groups. All / Changed / Conflicts filters take you to the relevant workspace.
 - **Diffs:** side-by-side and unified views, line and word highlights, syntax colors, change map, search, context folding, whitespace filtering, and hunk staging.
 - **Commit composer:** summary and description beside your files. The diagonal expand arrow opens a resizable writing window with staged-file statistics and an insertable changes summary. Closing keeps the draft for the current session.
-- **Precise staging:** partially staged files appear in both groups; each opens its own version. Commits validate the reviewed index, HEAD, and branch before writing.
+- **Precise staging:** partially staged files appear in both groups; each opens its own version. Stage or unstage a whole file or a single hunk. Commits validate the reviewed index, HEAD, and branch before writing.
+- **Discard, safely:** throw away a hunk, a file, or every change, and delete untracked files. Nothing is lost silently — Gitland snapshots tracked work into a recovery ref and copies untracked files aside before deleting, so both are restorable from **Repository → Recovery**.
 
 ## One Merge workspace
 
@@ -46,22 +47,27 @@ Magic resolve runs locally using deterministic text analysis. Review and test th
 | Area | Available actions |
 | --- | --- |
 | Repositories | Open, create, clone, publish to GitHub |
-| History | Parent-derived graph, all branches, search, inspect commits, load more |
-| Branches | Create, switch, rename, delete, merge, rebase |
+| History | Parent-derived graph, all branches, inspect commits, load more; search by message or author, and history for a single file |
+| Branches | Create, switch, rename, delete, merge, rebase, interactive rebase |
 | Tags | Direct Tags navigation; search, create annotated tags, edit, delete, push |
 | Remotes | Add, edit, rename, remove, fetch, fast-forward pull, push |
 | Saved work | Stash, inspect, apply, pop, drop; create and remove worktrees |
-| History operations | Cherry-pick, revert, message-only amend, soft/mixed reset, Continue/Abort |
+| History operations | Cherry-pick one commit or a run, revert (including merge commits), amend message or contents, soft/mixed/hard reset, Continue/Abort |
+| Working tree | Discard hunks, files, or everything; delete untracked files; blame; move and rename; add to .gitignore |
+| Large and nested | Submodules (add, update, sync) and Git LFS patterns |
+| Investigate | Bisect good/bad/skip, reflog, hooks, commit signature verification |
+| Patches | Export a commit or the working tree, apply a patch file, archive a revision as a zip |
 | Recovery | Retained Git references for prior tips, deleted tags/branches, and removed stashes |
 | GitHub | Publish repositories; list and create draft, prerelease, or published releases |
 
-Pushes are normal, non-force pushes. GitHub release creation verifies that the existing remote tag points at the selected commit. See the [workflow guide](docs/git-client.md) for operation details.
+Pushes are normal by default; a forced push uses `--force-with-lease`, so it refuses to overwrite commits the remote gained since your last fetch. Pull runs fast-forward, merge, or rebase, and can stash your changes first. GitHub release creation verifies that the existing remote tag points at the selected commit, and GitHub Enterprise hosts are supported. See the [workflow guide](docs/git-client.md) for operation details.
 
 ## Make it yours
 
 - Four themes: **Xcode Dark**, **Graphite**, **Midnight**, and **Paper**.
 - Independent interface and source fonts. Geist, Geist Mono, Inter, IBM Plex Sans, Cascadia Code, and Source Serif 4 are bundled; installed proprietary families have explicit fallbacks. [Font guide](docs/fonts.md).
 - Drag the sidebar divider; use arrow keys when focused; double-click to reset. Width, fonts, themes, and editor preferences persist.
+- The open repository is watched, so edits made in your editor appear without pressing F5. Refresh is still on F5, and never runs while a merge result has unsaved edits.
 - Optional [Hisashi OS Window Layer integration](docs/hoswl-integration.md), available in **Settings → Integrations**.
 
 ## Keyboard
@@ -86,7 +92,7 @@ Install the **.NET 10 SDK** and Git, then run:
 ./run.ps1 -Repository 'C:\Projects\my-repository'
 ```
 
-`build.ps1` runs core/integration tests against temporary repositories, exercises native controls offscreen, renders validation images, and publishes a framework-dependent build to `dist/Gitland-0.9.1`. `./build.ps1 -Payload` also publishes the self-contained payload the installer ships, to `dist/win-x64`.
+`build.ps1` runs core/integration tests against temporary repositories, exercises native controls offscreen, renders validation images, and publishes a framework-dependent build to `dist/Gitland-0.10.0`. `./build.ps1 -Payload` also publishes the self-contained payload the installer ships, to `dist/win-x64`.
 
 The Windows installer is built by Forge from `forge.toml`:
 
@@ -94,13 +100,15 @@ The Windows installer is built by Forge from `forge.toml`:
 ./installer.ps1
 ```
 
-`installer.ps1` builds and tests, publishes the self-contained payload to `dist/win-x64`, and writes `dist/installer/Gitland-Setup-0.9.1.exe`. It needs the sibling `../Forge` checkout with `build/forge.exe` and `build/uninstall.exe` present. `./version.ps1 -Bump patch` moves the version through every place it is written by hand; `./version.ps1` on its own verifies those places agree. [Release flow](AGENTS.md).
+`installer.ps1` builds and tests, publishes the self-contained payload to `dist/win-x64`, and writes `dist/installer/Gitland-Setup-0.10.0.exe`. It needs the sibling `../Forge` checkout with `build/forge.exe` and `build/uninstall.exe` present. `./version.ps1 -Bump patch` moves the version through every place it is written by hand; `./version.ps1` on its own verifies those places agree. [Release flow](AGENTS.md).
 
 The app project contains no sample data. Deterministic fixtures belong to `tools/Gitland.Preview` and are injected only by that validation host. GitHub command tests simulate hosted operations; Git integration tests use local temporary repositories and remotes.
 
 ## Current limits
 
-Text review supports UTF-8, including BOM, up to 2 MiB per file. Binary conflicts, other encodings, symbolic links, submodules, and structural/delete-modify conflicts need another tool. New, deleted, and renamed files use whole-file staging. Interactive rebase plans, blame, LFS/submodule interfaces, GitHub Enterprise, and release-asset uploads inside the app are not included. Commit drafts last for the window session. Native dialog placement and Windows backdrop effects depend on the desktop environment.
+Text review supports UTF-8, including BOM, up to 2 MiB per file. Binary conflicts, other encodings, symbolic links, and structural/delete-modify conflicts need another tool. New and deleted files use whole-file staging. Release-asset uploads inside the app are not included. Commit drafts last for the window session. Native dialog placement and Windows backdrop effects depend on the desktop environment.
+
+Interactive rebase runs your plan without opening an editor, which relies on the shell Git for Windows ships. Discarded work is recoverable, but not forever: recovery refs and the copies of deleted untracked files live in the repository and are removed by `git gc` and by deleting the repository.
 
 ## Source layout
 

@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Gitland.Core;
 
-public sealed record CommandRequest(string Executable, string Directory, IReadOnlyList<string> Arguments, string? Input = null, int TimeoutSeconds = 30);
+public sealed record CommandRequest(string Executable, string Directory, IReadOnlyList<string> Arguments, string? Input = null, int TimeoutSeconds = 30, IReadOnlyDictionary<string, string>? Environment = null);
 public sealed record CommandResult(int ExitCode, string Output, string Error);
 public interface ICommandRunner { Task<CommandResult> RunAsync(CommandRequest command); }
 public sealed class CommandFailedException(string message, int exitCode) : InvalidOperationException(message) { public int ExitCode { get; } = exitCode; }
@@ -19,6 +19,8 @@ public sealed class CommandRunner : ICommandRunner {
         start.Environment["GH_PAGER"] = "cat";
         start.Environment["NO_COLOR"] = "1";
         if (command.Executable == "gh") start.Environment["GH_HOST"] = "github.com";
+        // Caller overrides come last so an Enterprise GH_HOST or a rebase sequence editor wins.
+        if (command.Environment != null) foreach (var (key, value) in command.Environment) start.Environment[key] = value;
         Process process;
         try { process = Process.Start(start) ?? throw new IOException($"{command.Executable} could not start."); }
         catch (Win32Exception e) { throw new InvalidOperationException($"{command.Executable} is unavailable. Install it and add it to PATH.", e); }

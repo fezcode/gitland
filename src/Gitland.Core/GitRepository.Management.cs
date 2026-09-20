@@ -97,17 +97,37 @@ public sealed partial class GitRepository {
         string commit = await ResolveRef(target);
         await RunAsync(["tag", "--annotate", "--file=-", "--", name, commit], message);
     }
-    public async Task FetchAsync(string remote) { ValidateRemoteName(remote); await RunAsync(["fetch", "--", remote], timeout: 120); }
-    public async Task PullAsync() {
-        if ((await ReadStateAsync()).Changes.Count > 0) throw new InvalidOperationException("Commit or stash your changes before pulling.");
-        await RunAsync(["pull", "--ff-only", "--no-rebase"], timeout: 120);
+    public async Task FetchAsync(string remote, bool prune = false) {
+        ValidateRemoteName(remote);
+        await RunAsync(prune ? ["fetch", "--prune", "--", remote] : ["fetch", "--", remote], timeout: 120);
+    }
+    /// <summary>Integrates the upstream branch. "ff-only" refuses to create a commit, "merge" allows one, "rebase" replays local commits on top.</summary>
+    public async Task<GitOperationResult> PullAsync(string mode = "ff-only", bool autoStash = false) {
+        if (mode is not ("ff-only" or "merge" or "rebase")) throw new ArgumentException("Unsupported pull mode.");
+        // Without autostash Git refuses a dirty tree for merge and rebase, and a fast-forward can
+        // silently overwrite an edited file, so the check stays unless the caller opts in.
+        if (!autoStash && (await ReadStateAsync()).Changes.Count > 0) throw new InvalidOperationException("Commit or stash your changes before pulling, or allow Gitland to stash them for you.");
+        string[] strategy = mode switch {
+            "rebase" => ["--rebase"],
+            "merge" => ["--no-rebase", "--no-edit"],
+            _ => ["--ff-only", "--no-rebase"],
+        };
+        string[] arguments = ["-c", "core.editor=true", "pull", .. strategy, .. autoStash ? new[] { "--autostash" } : []];
+        var result = await RunResultAsync(arguments, timeout: 120);
+        if (result.ExitCode == 0) return new(true, "Pull completed.");
+        if (await OperationAsync() != "" || (await ReadStateAsync()).Changes.Any(c => c.IsConflict))
+            return new(false, "Pull needs conflict resolution. Resolve the files, then Continue.");
+        throw new CommandFailedException(result.Error.Trim(), result.ExitCode);
     }
     public async Task AddRemoteAsync(string name, string url) { ValidateRemoteName(name); ValidateRemoteUrl(url); await Git("remote", "add", "--", name, url); }
-    public async Task PushBranchAsync(string remote, string branch, string expectedHead) {
+    /// <summary>Pushes the current branch. A forced push uses --force-with-lease, which refuses to
+    /// overwrite commits the remote gained since the last fetch, so a teammate's work is never lost.</summary>
+    public async Task PushBranchAsync(string remote, string branch, string expectedHead, bool force = false) {
         ValidateRemoteName(remote); ValidateRefName(branch);
         var state = await ReadStateAsync();
         if (state.Branch != branch || await ResolveRef("HEAD") != expectedHead) throw new InvalidOperationException("The current branch changed. Refresh before pushing.");
-        await RunAsync(["-c", "push.followTags=false", "push", "--porcelain", "--set-upstream", "--", remote, $"refs/heads/{branch}:refs/heads/{branch}"], timeout: 120);
+        string[] lease = force ? ["--force-with-lease"] : [];
+        await RunAsync(["-c", "push.followTags=false", "push", "--porcelain", "--set-upstream", .. lease, "--", remote, $"refs/heads/{branch}:refs/heads/{branch}"], timeout: 120);
     }
     public async Task PushTagAsync(string remote, string tag, string expectedCommit) {
         ValidateRemoteName(remote); ValidateRefName(tag);
