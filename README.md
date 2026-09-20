@@ -4,11 +4,11 @@
 
 A native Git client for Windows, built around readable diffs, three-way review, and an editable merge result. Clockt’s **Xcode Dark** palette, configurable typography, and a resizable workspace keep your code at the center.
 
-[**Download for Windows x64**](https://github.com/fezcode/gitland/releases/latest) · [Release notes](docs/releases/0.10.0.md) · [Workflow guide](docs/git-client.md)
+[**Download for Windows x64**](https://github.com/fezcode/gitland/releases/latest) · [Release notes](docs/releases/0.11.0.md) · [Workflow guide](docs/git-client.md)
 
 ## Get started
 
-1. Download `Gitland-Setup-0.10.0.exe` from Releases and run it.
+1. Download `Gitland-Setup-0.11.0.exe` from Releases and run it.
 2. Run `gitland.exe`.
 3. Choose **Open repository**, **Clone repository**, or **Create repository**.
 
@@ -94,7 +94,7 @@ Install the **.NET 10 SDK** and Git, then run:
 ./run.ps1 -Repository 'C:\Projects\my-repository'
 ```
 
-`build.ps1` runs core/integration tests against temporary repositories, exercises native controls offscreen, renders validation images, and publishes a framework-dependent build to `dist/Gitland-0.10.0`. `./build.ps1 -Payload` also publishes the self-contained payload the installer ships, to `dist/win-x64`.
+`build.ps1` runs core/integration tests against temporary repositories, exercises native controls offscreen, renders validation images, and publishes a framework-dependent build to `dist/Gitland-0.11.0`. `./build.ps1 -Payload` also publishes the self-contained payload the installer ships, to `dist/win-x64`.
 
 The Windows installer is built by Forge from `forge.toml`:
 
@@ -102,7 +102,7 @@ The Windows installer is built by Forge from `forge.toml`:
 ./installer.ps1
 ```
 
-`installer.ps1` builds and tests, publishes the self-contained payload to `dist/win-x64`, and writes `dist/installer/Gitland-Setup-0.10.0.exe`. It needs the sibling `../Forge` checkout with `build/forge.exe` and `build/uninstall.exe` present. `./version.ps1 -Bump patch` moves the version through every place it is written by hand; `./version.ps1` on its own verifies those places agree. [Release flow](AGENTS.md).
+`installer.ps1` builds and tests, publishes the self-contained payload to `dist/win-x64`, and writes `dist/installer/Gitland-Setup-0.11.0.exe`. It needs the sibling `../Forge` checkout with `build/forge.exe` and `build/uninstall.exe` present. `./version.ps1 -Bump patch` moves the version through every place it is written by hand; `./version.ps1` on its own verifies those places agree. [Release flow](AGENTS.md).
 
 The app project contains no sample data. Deterministic fixtures belong to `tools/Gitland.Preview` and are injected only by that validation host. GitHub command tests simulate hosted operations; Git integration tests use local temporary repositories and remotes.
 
