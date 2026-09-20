@@ -323,6 +323,7 @@ public sealed partial class MainWindow : Window {
         if (!await MayLeaveMerge()) return;
         var repo = await GitRepository.OpenAsync(path); var state = await repo.ReadStateAsync();
         var management = await repo.ReadManagementAsync();
+        _checked.Clear();
         _threeRevisions = null; _threeFile = null; _threeLocalPaths = null; _tools = null; _repo = repo; _state = state; _management = management; RestoreCommitDraft(_commitDrafts.GetValueOrDefault(repo.Root, "")); _mode = "changes"; _filter = "all"; _fileScope = "changed"; _selected = null; _merge = null; _mergeDirty = false;
         _repoName.Text = System.IO.Path.GetFileName(repo.Root); _branch.Text = state.Branch; RenderNavigation(); RenderContext(); RenderFiles();
         _leftRef.Text = state.Refs.Contains("main") ? "main" : "HEAD~1"; _rightRef.Text = "HEAD";
@@ -337,6 +338,8 @@ public sealed partial class MainWindow : Window {
         if (_mode == "files" && _externalLeft != null && _externalRight != null) { await ShowLocalFiles(_externalLeft, _externalRight); return; }
         if (_repo == null) { _status.Text = "Open a repository to refresh its changes."; return; }
         _state = await _repo.ReadStateAsync(); _management = await _repo.ReadManagementAsync();
+        // A refresh can arrive from the watcher while files are ticked; keep the ones still there.
+        PruneChecked();
         if (_commitFailed) { _commitFailed = false; _commitFeedback = ""; }
         _branch.Text = _state.Branch; RenderNavigation();
         if (_mode is "repository" or "github") { await LoadManagement(); RenderFiles(); return; }

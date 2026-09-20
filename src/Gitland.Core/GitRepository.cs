@@ -151,6 +151,20 @@ public sealed partial class GitRepository {
         if (await HasHead()) await RunAsync(oldPath == null ? ["reset", "-q", "HEAD", "--", path] : ["reset", "-q", "HEAD", "--", path, oldPath]);
         else await Git("rm", "--cached", "-f", "--", path);
     }
+    /// <summary>Stages several files in one Git call. Every path is validated before anything runs,
+    /// so a batch holding one bad path stages nothing rather than stopping half way.</summary>
+    public async Task StageFilesAsync(IReadOnlyList<string> paths) {
+        if (paths.Count == 0) throw new InvalidOperationException("Select at least one file to stage.");
+        foreach (string path in paths) ValidatePath(path);
+        await RunAsync(["add", "--", .. paths]);
+    }
+    /// <summary>Unstages several files in one Git call, with the same all-or-nothing validation.</summary>
+    public async Task UnstageFilesAsync(IReadOnlyList<string> paths) {
+        if (paths.Count == 0) throw new InvalidOperationException("Select at least one file to unstage.");
+        foreach (string path in paths) ValidatePath(path);
+        if (await HasHead()) await RunAsync(["reset", "-q", "HEAD", "--", .. paths]);
+        else await RunAsync(["rm", "--cached", "-f", "--", .. paths]);
+    }
     public static IReadOnlyList<PatchHunk> ParseHunks(string patch) {
         var matches = Regex.Matches(patch, @"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@[^\n]*", RegexOptions.Multiline);
         if (matches.Count == 0) return [];

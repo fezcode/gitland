@@ -160,13 +160,19 @@ public sealed partial class MainWindow {
         void FileRow(GitChange file, bool? stagedView = null, bool showPath = false) {
             bool active = file.Path == _selected?.Path && (stagedView == null || _reviewStaged == stagedView);
             var color = file.IsConflict ? Amber : stagedView == true ? Green : file.Index is '?' or 'A' ? Green : file.Label == "Deleted" ? Red : Muted;
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 8 };
-            row.Children.Add(Icon(file.IsConflict ? "merge" : "file", active ? Ink : Faint, 13));
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto"), ColumnSpacing = 8 };
+            // The tick changes only the selection; the row itself still opens the diff.
+            var tick = new CheckBox { IsChecked = IsChecked(file, stagedView), MinWidth = 0, Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Center };
+            Avalonia.Automation.AutomationProperties.SetName(tick, "Select " + file.Path);
+            ToolTip.SetTip(tick, "Select this file for a multi-file action");
+            tick.IsCheckedChanged += (_, _) => { if (tick.IsChecked != IsChecked(file, stagedView)) ToggleChecked(file, stagedView, tick.IsChecked == true); };
+            row.Children.Add(tick);
+            Add(row, Icon(file.IsConflict ? "merge" : "file", active ? Ink : Faint, 13), 0, 1);
             Control name = Text(System.IO.Path.GetFileName(file.Path), 12, active ? Ink : Muted);
             string folder = System.IO.Path.GetDirectoryName(file.Path)?.Replace('\\', '/') ?? "";
             if (showPath && folder.Length > 0) { var labels = Col(name, Text(folder, 10, Faint)); labels.Spacing = 3; name = labels; }
-            Add(row, name, 0, 1);
-            Add(row, file.IsConflict ? Text("!", 11, Amber) : (_mode is "changes" or "merge") && (stagedView == true || file.IsStaged && !file.IsUnstaged) ? Icon("check", Green, 12) : Text(!file.IsChanged ? "" : file.Index == '?' ? "A" : file.Label == "Deleted" ? "D" : "M", 10, color), 0, 2);
+            Add(row, name, 0, 2);
+            Add(row, file.IsConflict ? Text("!", 11, Amber) : (_mode is "changes" or "merge") && (stagedView == true || file.IsStaged && !file.IsUnstaged) ? Icon("check", Green, 12) : Text(!file.IsChanged ? "" : file.Index == '?' ? "A" : file.Label == "Deleted" ? "D" : "M", 10, color), 0, 3);
             var button = Button(file.Path, () => Run(() => SelectFile(file, stagedView))); button.Content = row; button.HorizontalContentAlignment = HorizontalAlignment.Stretch; button.HorizontalAlignment = HorizontalAlignment.Stretch;
             button.Classes.Add("selection-item"); button.Classes.Set("selected", active); button.Padding = new Thickness(12, 8); button.Background = active ? SelectedSurface : Brushes.Transparent; button.BorderBrush = Brushes.Transparent; button.BorderThickness = new Thickness(0); button.CornerRadius = new CornerRadius(3); ToolTip.SetTip(button, file.Path + " · " + (stagedView == true ? "Staged changes" : file.Label));
             // Every row in every scope gets the same menu, built from this row's group and state.
@@ -177,9 +183,23 @@ public sealed partial class MainWindow {
             void Group(string label, IEnumerable<GitChange> entries, IBrush color, bool staged) {
                 var items = entries.ToArray();
                 if (items.Length == 0) return;
-                var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(13, 12, 12, 6) };
-                header.Children.Add(Text(label, 11, color, true));
-                Add(header, Text(items.Length.ToString(), 10, Faint), 0, 1); _fileList.Children.Add(header);
+                var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 8, Margin = new Thickness(13, 12, 12, 6) };
+                int ticked = items.Count(f => IsChecked(f, staged));
+                var all = new CheckBox { MinWidth = 0, Padding = new Thickness(0), IsThreeState = true, VerticalAlignment = VerticalAlignment.Center };
+                all.IsChecked = ticked == 0 ? false : ticked == items.Length ? true : null;
+                Avalonia.Automation.AutomationProperties.SetName(all, "Select all " + label.ToLowerInvariant());
+                ToolTip.SetTip(all, ticked == items.Length ? "Clear this group" : "Select every file in this group");
+                all.Click += (_, _) => {
+                    bool selectAll = ticked < items.Length;
+                    foreach (var entry in items) {
+                        var key = new FileSelection(entry.Path, staged);
+                        if (selectAll) _checked.Add(key); else _checked.Remove(key);
+                    }
+                    RenderFiles(); UpdateSelectionStatus();
+                };
+                header.Children.Add(all);
+                Add(header, Text(label, 11, color, true), 0, 1);
+                Add(header, Text(ticked > 0 ? $"{ticked}/{items.Length}" : items.Length.ToString(), 10, ticked > 0 ? Accent : Faint), 0, 2); _fileList.Children.Add(header);
                 foreach (var file in items) FileRow(file, staged, true);
             }
             Group("Unstaged", files.Where(f => _filter != "staged" && !f.IsConflict && f.IsUnstaged), Muted, false);

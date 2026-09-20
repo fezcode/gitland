@@ -78,6 +78,43 @@ Check(RowMenu("src/core/diff-service.ts").All(i => !i.IsEnabled || i.Header is "
 var conflictMenu = RowMenuLabels("src/core/merge.ts");
 Check(conflictMenu.Contains("Open merge editor") && conflictMenu.Contains("Take ours (keep this branch)") && conflictMenu.Contains("Take theirs (keep incoming)"), "A conflicted file's menu offers resolution instead of staging.");
 Check(!conflictMenu.Contains("Stage file"), "A conflicted file is not offered staging, which would skip resolving it.");
+
+// A partially staged file is drawn in both groups and each row opens a different version, so a
+// selection entry is identified by its group as well as its path.
+Check(new FileSelection("app.ts", false) != new FileSelection("app.ts", true), "A row's group is part of its selection identity.");
+Check(new HashSet<FileSelection> { new("app.ts", null), new("app.ts", true), new("app.ts", false) }.Count == 3, "The unstaged, staged and ungrouped rows of one file are three distinct selections.");
+
+// Every row carries a checkbox, and ticking rows moves the menu onto the whole selection.
+CheckBox RowTick(string path) => Buttons(path).First().GetVisualDescendants().OfType<CheckBox>().First();
+string[] RowMenuOf(string path) => Buttons(path).First().ContextMenu!.Items.OfType<MenuItem>().Select(i => (string?)i.Header ?? "").ToArray();
+Check(Buttons("src/core/diff-service.ts").First().GetVisualDescendants().OfType<CheckBox>().Any(), "Each file row carries a checkbox for multi-selection.");
+Check(!RowTick("src/core/diff-service.ts").IsChecked!.Value, "Rows start unticked.");
+
+// Two unstaged files: the selection keeps every action they share, and says how many.
+RowTick("src/core/diff-service.ts").IsChecked = true; Pump();
+RowTick("README.md").IsChecked = true; Pump();
+var pairMenu = RowMenuOf("src/core/diff-service.ts");
+Check(pairMenu.Contains("Stage 2 files"), "A multi-row selection puts the count in the menu labels.");
+Check(pairMenu.Contains("Discard changes in 2 files…"), "Discarding a selection names how many files it covers.");
+Check(pairMenu.Contains("Copy 2 paths") && pairMenu.Contains("Copy 2 file names"), "Copying reports how many paths it will copy.");
+Check(pairMenu.Any(l => l.StartsWith("Clear selection")), "A selection can be cleared from the menu.");
+Check(!Buttons("src/core/diff-service.ts").First().ContextMenu!.Items.OfType<MenuItem>().Single(i => (string?)i.Header == "Blame").IsEnabled, "Actions that open one view are withdrawn while several rows are selected.");
+
+// An unticked row acts on itself and leaves the selection alone.
+Check(!RowMenuOf("src/components/change-map.tsx").Any(l => l.Contains("2 files")), "Right-clicking an unticked row acts on that row alone.");
+
+// Adding a conflict leaves the selection with no action the whole set shares.
+RowTick("src/core/merge.ts").IsChecked = true; Pump();
+var mixedMenu = RowMenuOf("src/core/diff-service.ts");
+Check(!mixedMenu.Any(l => l.StartsWith("Stage ")), "Mixing a conflict into the selection withdraws staging.");
+Check(!mixedMenu.Any(l => l.StartsWith("Discard ")), "Mixing a conflict into the selection withdraws discarding.");
+Check(!mixedMenu.Any(l => l.StartsWith("Take ours")), "Mixing a plain change into the selection withdraws conflict resolution.");
+Check(mixedMenu.Contains("Copy 3 paths"), "Copying still works across a mixed selection, and counts all three.");
+
+RowTick("src/core/diff-service.ts").IsChecked = false; Pump();
+RowTick("README.md").IsChecked = false; Pump();
+RowTick("src/core/merge.ts").IsChecked = false; Pump();
+Check(!RowMenuOf("src/core/diff-service.ts").Any(l => l.StartsWith("Clear selection")), "Clearing the ticks removes the selection entry from the menu.");
 Click("Gitland menu");
 var appMenu = Buttons("Gitland menu").Single().ContextMenu!;
 // Naming the groups rather than counting them says which menu went missing when this fails.

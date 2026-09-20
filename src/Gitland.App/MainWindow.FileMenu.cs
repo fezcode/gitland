@@ -39,34 +39,54 @@ public sealed partial class MainWindow {
     ContextMenu FileContextMenu(GitChange file, bool? stagedView) {
         var menu = new ContextMenu();
         bool live = _repo != null;
-        bool untracked = file.Index == '?';
-        // A plain list has no group, so fall back to the file's own staged/unstaged state.
-        bool staged = stagedView ?? (!file.IsUnstaged && file.IsStaged);
 
-        if (file.IsConflict) {
-            menu.Items.Add(MenuAction("Open merge editor", () => OpenMergeFor(file), live));
-            menu.Items.Add(MenuAction("Take ours (keep this branch)", () => TakeSide(file, true), live));
-            menu.Items.Add(MenuAction("Take theirs (keep incoming)", () => TakeSide(file, false), live));
-        } else if (untracked) {
-            menu.Items.Add(MenuAction("Stage file", () => StageFrom(file), live));
-            menu.Items.Add(MenuAction("Delete file…", () => DiscardFrom(file, stagedView), live));
-            menu.Items.Add(MenuAction("Add to .gitignore", () => IgnoreFrom(file), live));
-        } else if (staged) {
-            menu.Items.Add(MenuAction("Unstage file", () => UnstageFrom(file), live && file.IsChanged));
-            menu.Items.Add(MenuAction("Discard all changes…", () => DiscardFrom(file, true), live && file.IsChanged));
+        // Right-clicking a ticked row acts on the whole selection; an unticked row acts on itself and
+        // leaves the selection alone, which is what every file manager does.
+        var targets = MenuTargets(file, stagedView);
+        var rows = MenuRows(file, stagedView);
+        int count = targets.Count;
+        bool many = count > 1;
+        string files = Count(count, "file", "files");
+
+        // A mixed selection only keeps the actions that are valid for every row in it.
+        bool allConflicted = targets.All(f => f.IsConflict);
+        bool noneConflicted = targets.All(f => !f.IsConflict);
+        bool allUntracked = targets.All(f => f.Index == '?');
+        bool allChanged = targets.All(f => f.IsChanged);
+        bool staged = stagedView ?? (!file.IsUnstaged && file.IsStaged);
+        bool allStageable = noneConflicted && targets.All(f => f.IsUnstaged || f.Index == '?');
+        bool allUnstageable = noneConflicted && rows.All(row =>
+            targets.FirstOrDefault(f => f.Path == row.Path) is { IsStaged: true } && (row.Staged ?? true));
+
+        if (allConflicted) {
+            menu.Items.Add(MenuAction(many ? $"Open merge editor for {targets[0].Path}" : "Open merge editor", () => OpenMergeFor(targets[0]), live));
+            menu.Items.Add(MenuAction(many ? $"Take ours for {files} (keep this branch)" : "Take ours (keep this branch)", () => TakeSideMany(targets, true), live));
+            menu.Items.Add(MenuAction(many ? $"Take theirs for {files} (keep incoming)" : "Take theirs (keep incoming)", () => TakeSideMany(targets, false), live));
         } else {
-            menu.Items.Add(MenuAction("Stage file", () => StageFrom(file), live && file.IsChanged));
-            menu.Items.Add(MenuAction("Discard changes…", () => DiscardFrom(file, false), live && file.IsChanged));
+            if (allStageable) menu.Items.Add(MenuAction($"Stage {files}", () => StageMany(targets), live && allChanged));
+            if (allUnstageable) menu.Items.Add(MenuAction($"Unstage {files}", () => UnstageMany(targets), live && allChanged));
+            if (noneConflicted) {
+                string label = allUntracked ? $"Delete {files}…"
+                    : many ? $"Discard changes in {files}…"
+                    : staged ? "Discard all changes…" : "Discard changes…";
+                menu.Items.Add(MenuAction(label, () => DiscardMany(rows), live && allChanged));
+            }
+            if (allUntracked) menu.Items.Add(MenuAction(many ? $"Add {files} to .gitignore" : "Add to .gitignore", () => IgnoreMany(targets), live));
         }
 
+        // These open a single view, so they stay on the row that was clicked.
         menu.Items.Add(new Separator());
-        menu.Items.Add(MenuAction("Blame", () => BlameFor(file), live));
-        menu.Items.Add(MenuAction("History of this file", () => FileHistoryFor(file), live));
-        menu.Items.Add(MenuAction("Rename or move…", () => MoveFileDialog(file), live && !untracked));
+        menu.Items.Add(MenuAction("Blame", () => BlameFor(file), live && !many));
+        menu.Items.Add(MenuAction("History of this file", () => FileHistoryFor(file), live && !many));
+        menu.Items.Add(MenuAction("Rename or move…", () => MoveFileDialog(file), live && !many && file.Index != '?'));
         menu.Items.Add(new Separator());
-        menu.Items.Add(MenuAction("Copy path", () => CopyText(file.Path, "Path copied.")));
-        menu.Items.Add(MenuAction("Copy file name", () => CopyText(System.IO.Path.GetFileName(file.Path), "File name copied.")));
-        menu.Items.Add(MenuAction("Reveal in File Explorer", () => Reveal(System.IO.Path.Combine(_repo?.Root ?? "", file.Path.Replace('/', System.IO.Path.DirectorySeparatorChar))), live));
+        menu.Items.Add(MenuAction(many ? $"Copy {count} paths" : "Copy path", () => CopyPaths(targets, false)));
+        menu.Items.Add(MenuAction(many ? $"Copy {count} file names" : "Copy file name", () => CopyPaths(targets, true)));
+        menu.Items.Add(MenuAction("Reveal in File Explorer", () => Reveal(System.IO.Path.Combine(_repo?.Root ?? "", file.Path.Replace('/', System.IO.Path.DirectorySeparatorChar))), live && !many));
+        if (_checked.Count > 0) {
+            menu.Items.Add(new Separator());
+            menu.Items.Add(MenuAction($"Clear selection ({_checked.Count})", () => Do(ClearChecked)));
+        }
         return menu;
     }
 
