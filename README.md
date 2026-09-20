@@ -12,7 +12,9 @@ A native Git client for Windows, built around readable diffs, three-way review, 
 2. Run `gitland.exe`.
 3. Choose **Open repository**, **Clone repository**, or **Create repository**.
 
-The installer places Gitland in `%LOCALAPPDATA%\Programs\Gitland`, creates the shortcuts you select, and registers an uninstall entry in Apps & Features. Your settings live in `%LOCALAPPDATA%\Gitland` and are removed only if you ask the uninstaller to. The Windows release includes the .NET runtime. Install [Git for Windows](https://gitforwindows.org/) and keep `git` on PATH. GitHub publishing and release management additionally use the [GitHub CLI](https://cli.github.com/) and your existing `gh` authentication. The app starts empty, with no sample repository or generated history.
+The installer places Gitland in `%LOCALAPPDATA%\Programs\Gitland`, creates the shortcuts you select, and registers an uninstall entry in Apps & Features. Your settings live in `%LOCALAPPDATA%\Gitland` and are removed only if you ask the uninstaller to. The Windows release includes the .NET runtime.
+
+Gitland runs every operation through Git, so it needs [Git for Windows](https://gitforwindows.org/) on your PATH. **Settings → Git** reports whether Git is installed, whether a newer release exists, and installs or updates it for you — through winget where available, otherwise the official 64-bit installer from the Git for Windows project. Windows asks for administrator permission; Gitland never bypasses that prompt. GitHub publishing and release management additionally use the [GitHub CLI](https://cli.github.com/) and your existing `gh` authentication. The app starts empty, with no sample repository or generated history.
 
 You can also launch a repository directly:
 

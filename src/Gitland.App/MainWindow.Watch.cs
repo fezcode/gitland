@@ -15,6 +15,9 @@ public sealed partial class MainWindow {
         _watchTimer?.Stop(); _watchTimer = null;
         _watchPending = false;
         if (root == null || !Directory.Exists(root)) return;
+        // The offscreen validation harness drives file changes itself and asserts on the view it
+        // selected; a background refresh would race those assertions and make failures meaningless.
+        if (Environment.GetEnvironmentVariable("GITLAND_DISABLE_WATCH") == "1") return;
 
         _watchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         _watchTimer.Tick += async (_, _) => {

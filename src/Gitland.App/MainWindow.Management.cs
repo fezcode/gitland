@@ -43,11 +43,15 @@ public sealed partial class MainWindow {
         RenderNavigation(); RenderContext(); RenderFiles();
         if (_mode == "github") RenderGitHub(); else if (_mode == "repository") RenderManagement(); else await Refresh();
     }
-    async Task PushBranch(string remote) {
+    async Task PushBranch(string remote, bool force = false) {
         if (_repo == null || _management?.Head == null) return;
         var url = _management.Remotes.Single(r => r.Name == remote).Url;
-        if (!await ReviewAction("Push current branch", $"Repository: {_repo.Root}\nRemote: {remote} · {url}\nBranch: {_state.Branch}\nCommit: {_management.Head}\n\nThis sends committed history on this branch to the remote.", "Push branch")) return;
-        await _repo.PushBranchAsync(remote, _state.Branch, _management.Head); await LoadManagement(); _status.Text = "Branch pushed.";
+        string summary = $"Repository: {_repo.Root}\nRemote: {remote} · {url}\nBranch: {_state.Branch}\nCommit: {_management.Head}\n\n";
+        string detail = force
+            ? summary + "This replaces the remote branch with your local one, which is what an amend or rebase needs. Gitland uses --force-with-lease, so the push is refused if the remote gained commits since your last fetch."
+            : summary + "This sends committed history on this branch to the remote.";
+        if (!await ReviewAction(force ? "Force push current branch" : "Push current branch", detail, force ? "Force push" : "Push branch")) return;
+        await _repo.PushBranchAsync(remote, _state.Branch, _management.Head, force); await LoadManagement(); _status.Text = force ? "Branch force-pushed." : "Branch pushed.";
     }
     async Task PushTag(GitTag tag) {
         if (_repo == null) return;

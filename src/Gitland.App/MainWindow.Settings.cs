@@ -55,7 +55,7 @@ public sealed partial class MainWindow {
         string selected = "appearance";
         void Render() {
             tabs.Children.Clear();
-            foreach (var (id, label, icon) in new[] { ("appearance", "Appearance", "layers"), ("fonts", "Fonts", "file"), ("editor", "Editor", "diff"), ("integrations", "Integrations", "cloud"), ("about", "About Gitland", "branch") }) {
+            foreach (var (id, label, icon) in new[] { ("appearance", "Appearance", "layers"), ("fonts", "Fonts", "file"), ("editor", "Editor", "diff"), ("git", "Git", "branch"), ("integrations", "Integrations", "cloud"), ("about", "About Gitland", "branch") }) {
                 var tab = Button(label, () => { selected = id; Render(); }, icon); tab.HorizontalAlignment = HorizontalAlignment.Stretch; tab.HorizontalContentAlignment = HorizontalAlignment.Left; tab.Classes.Add("selection-item"); tab.Classes.Set("selected", selected == id); tab.Background = selected == id ? SelectedSurface : Brushes.Transparent; tab.BorderThickness = new Thickness(0); tab.Padding = new Thickness(12, 9); tabs.Children.Add(tab);
             }
             var page = new StackPanel { Spacing = 22, Margin = new Thickness(26, 24) };
@@ -112,6 +112,19 @@ public sealed partial class MainWindow {
                 var sync = new CheckBox { Content = "Synchronize scrolling across merge panes", IsChecked = GitlandApplication.Preferences.SyncMergeScroll };
                 sync.IsCheckedChanged += (_, _) => SavePreferences(GitlandApplication.Preferences with { SyncMergeScroll = sync.IsChecked == true }); page.Children.Add(sync);
                 page.Children.Add(Paragraph("Ctrl+Z undoes text edits. Conflict choices have their own Undo resolution action.", Faint));
+            } else if (selected == "git") {
+                page.Children.Add(Col(Text("Git", 17, strong: true), Paragraph("Gitland runs every repository operation through Git, so it needs Git for Windows on your PATH.")));
+                _gitStatus = Text("Checking…", 13);
+                _gitDetail = Paragraph("", Faint);
+                _gitInstall = Button("Install the latest Git", () => Run(InstallGit), "arrow-down", primary: true);
+                _gitInstall.IsEnabled = false;
+                var recheck = Button("Check again", () => Run(RefreshGitStatus), "refresh");
+                page.Children.Add(Row(Icon("branch", Faint, 17), _gitStatus));
+                page.Children.Add(_gitDetail);
+                page.Children.Add(WrapActions(_gitInstall, recheck));
+                page.Children.Add(Paragraph("Gitland installs Git with winget when it is available, and otherwise downloads the official 64-bit installer from the Git for Windows project on GitHub. Windows asks for administrator permission; Gitland never bypasses that prompt."));
+                page.Children.Add(Paragraph("After a first install, restart Gitland so it picks up the updated PATH.", Faint));
+                _ = RefreshGitStatus();
             } else if (selected == "integrations") {
                 page.Children.Add(Col(Text("Hisashi menubar", 17, strong: true), Paragraph("Put Gitland’s File, View, Git and Settings menus in Hisashi’s OS Window Layer.")));
                 var enabled = new CheckBox { Content = "Enable hoswl integration", IsChecked = GitlandApplication.Preferences.HoswlEnabled };

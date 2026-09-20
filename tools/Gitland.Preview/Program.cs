@@ -17,6 +17,9 @@ using Avalonia.Media.TextFormatting;
 AppDomain.CurrentDomain.UnhandledException += (_, e) => { Console.Error.WriteLine(e.ExceptionObject); Environment.Exit(1); };
 var settingsPath = Path.Combine(Path.GetFullPath(args.FirstOrDefault() is { } directory && !directory.StartsWith("--") ? directory : "dist/preview"), "test-settings.json");
 Environment.SetEnvironmentVariable("GITLAND_SETTINGS_PATH", settingsPath);
+// This harness writes repository files itself and then asserts on the view it selected, so the
+// repository watcher must not refresh underneath it. Watching is covered by its own checks below.
+Environment.SetEnvironmentVariable("GITLAND_DISABLE_WATCH", "1");
 new SettingsStore(settingsPath).Save(new UserSettings());
 AppBuilder.Configure<GitlandApplication>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
 if (args.FirstOrDefault() == "--font-info") {
@@ -222,6 +225,13 @@ darkPicker.IsDropDownOpen = true; Pump(); SaveDialog(settingsDialog, "settings-f
 SettingsClick("Appearance"); SettingsClick("Use Paper theme"); SettingsClick("Fonts");
 SettingsClick("Restore default fonts");
 Check(Palette.Sans.Equals(FontCatalog.InterfaceChoice("geist").Family) && Palette.Mono.Equals(FontCatalog.CodeChoice("geist-mono").Family), "Default fonts can be restored together.");
+SettingsClick("Git"); Pump();
+// Gitland is useless without Git, so Settings has to say whether it is there and offer to fix it.
+var gitInstall = settingsDialog.GetVisualDescendants().OfType<Button>()
+    .Where(b => (AutomationProperties.GetName(b) ?? "").Contains("latest Git")).ToArray();
+Check(gitInstall.Length == 1, "Settings offers to install Git.");
+Check(settingsDialog.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetName(b) == "Check again"), "The Git page can re-check for Git without reopening Settings.");
+SaveDialog(settingsDialog, "settings-git.png");
 SettingsClick("Integrations"); SaveDialog(settingsDialog, "settings-integrations.png");
 Check(settingsDialog.GetVisualDescendants().OfType<CheckBox>().Single().IsChecked == false, "Hisashi integration has an explicit opt-in setting.");
 SettingsClick("Done"); Save("merge-paper.png");
@@ -339,6 +349,32 @@ async Task ExerciseRepository() {
     commitWindow.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Commit from message window").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); await WaitForAction();
     Check(window.OwnedWindows.Count == 0 && (await repo.CommitMessageAsync("HEAD")).Contains("Long messages stay intact."), "Commit from the separate window writes the full message and closes after success.");
     Check((await repo.ReadStateAsync()).Changes.Count == 0, "The main commit button handles the remaining staged files.");
+
+    // The gap that prompted this work. The confirmation is a modal ShowDialog, which blocks this
+    // headless harness, so the behaviour behind it is covered by DiscardTests against real
+    // repositories; what is checked here is that the UI offers the action, correctly labelled.
+    await File.WriteAllTextAsync(Path.Combine(root, "source.txt"), "discard me" + "\n", new UTF8Encoding(false));
+    await File.WriteAllTextAsync(Path.Combine(root, "scratch.txt"), "delete me" + "\n", new UTF8Encoding(false));
+    Click("Refresh · F5"); await WaitForAction();
+    Buttons("source.txt").First().RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); await WaitForAction();
+    Check(Buttons("Discard file").Single().IsEnabled, "An open repository enables discarding a tracked file.");
+    Save("discard-available.png");
+    Buttons("scratch.txt").First().RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); await WaitForAction();
+    Check(Buttons("Delete file").Length == 1 && Buttons("Discard file").Length == 0, "An untracked file offers deletion rather than discard.");
+    Check(Buttons("Hunk 1").Length == 0 || Buttons("Discard").Length > 0, "A hunk offers its own discard beside staging.");
+    await repo.DiscardUnstagedAsync(["source.txt"]);
+    await repo.CleanUntrackedAsync(["scratch.txt"]);
+    Click("Refresh · F5"); await WaitForAction();
+
+    Click("Repository"); await WaitForAction();
+    Check(Buttons("Rewrite").Length == 1 && Buttons("Advanced").Length == 1, "Repository exposes the rewrite and advanced tabs.");
+    Click("Rewrite"); await WaitForAction();
+    Check(Buttons("Interactive rebase…").Single().IsEnabled && Buttons("Hard reset…").Single().IsEnabled && Buttons("Amend last commit…").Single().IsEnabled, "Rewrite offers interactive rebase, hard reset and amend against a real repository.");
+    Save("repository-rewrite.png");
+    Click("Advanced"); await WaitForAction();
+    Check(Buttons("Start bisect…").Single().IsEnabled && Buttons("Add submodule…").Single().IsEnabled && Buttons("Apply patch…").Single().IsEnabled, "Advanced offers bisect, submodules and patches against a real repository.");
+    Save("repository-advanced.png");
+    Click("History"); await WaitForAction(); Click("Working changes"); await WaitForAction();
     await repo.Git("checkout", "-b", "incoming"); await File.WriteAllTextAsync(Path.Combine(root, "source.txt"), "incoming\n", new UTF8Encoding(false)); await repo.Git("add", "."); await repo.Git("commit", "-m", "Incoming");
     await repo.Git("checkout", "main"); await File.WriteAllTextAsync(Path.Combine(root, "source.txt"), "ours\n", new UTF8Encoding(false)); await repo.Git("add", "."); await repo.Git("commit", "-m", "Ours");
     try { await repo.Git("merge", "incoming"); } catch (InvalidOperationException) { }

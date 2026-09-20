@@ -12,7 +12,7 @@ public sealed partial class MainWindow {
     void RepositoryPage(Control content) {
         var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*") };
         var tabs = new WrapPanel { Margin = new Thickness(12, 8) };
-        foreach (string name in new[] { "History", "Branches", "Tags", "Remotes", "Stashes", "Worktrees", "Recovery" }) {
+        foreach (string name in new[] { "History", "Branches", "Tags", "Remotes", "Stashes", "Worktrees", "Rewrite", "Advanced", "Recovery" }) {
             var tab = Button(name, () => { _repositoryTab = name; RenderManagement(); RenderNavigation(); }); tab.Classes.Add("selection-item"); tab.Background = name == _repositoryTab ? SelectedSurface : Brushes.Transparent; tab.BorderThickness = new Thickness(0); tabs.Children.Add(tab);
         }
         Add(root, tabs, 0);
@@ -48,7 +48,11 @@ public sealed partial class MainWindow {
                 break;
             case "Remotes":
                 page.Children.Add(Section("Repository connections", Actions(RepoAction("Add remote", () => RemoteDialog(null)), Button("Clone repository", () => Run(CloneDialog)), Button("Create repository", () => Run(CreateRepositoryDialog)))));
-                foreach (var remote in model.Remotes) page.Children.Add(Section(remote.Name, Paragraph(remote.Url), Actions(RepoAction("Fetch", async () => { await _repo!.FetchAsync(remote.Name); await LoadManagement(); }), RepoAction("Push branch", () => PushBranch(remote.Name)), RepoAction("Edit remote", () => RemoteDialog(remote)), RepoAction("Remove remote", async () => {
+                foreach (var remote in model.Remotes) page.Children.Add(Section(remote.Name, Paragraph(remote.Url), Actions(RepoAction("Fetch", async () => { await _repo!.FetchAsync(remote.Name); await LoadManagement(); _status.Text = "Fetched " + remote.Name + "."; }),
+                    RepoAction("Fetch and prune", async () => { await _repo!.FetchAsync(remote.Name, true); await LoadManagement(); _status.Text = "Fetched " + remote.Name + " and pruned deleted branches."; }),
+                    RepoAction("Pull…", PullDialog),
+                    RepoAction("Push branch", () => PushBranch(remote.Name)),
+                    RepoAction("Force push…", () => PushBranch(remote.Name, true)), RepoAction("Edit remote", () => RemoteDialog(remote)), RepoAction("Remove remote", async () => {
                     if (!await ReviewAction("Remove remote", $"Remove {remote.Name} ({remote.Url}) and its local tracking references? The remote repository itself is preserved.", "Remove remote")) return;
                     await _repo!.DeleteRemoteAsync(remote.Name, remote.Url); await LoadManagement();
                 }))));
@@ -68,6 +72,45 @@ public sealed partial class MainWindow {
                     RepoAction("Open worktree", () => OpenRepository(tree.Path)), RepoAction("Remove worktree", async () => {
                         if (!await ReviewAction("Remove worktree", $"Remove the working folder {tree.Path}? Git refuses removal if it contains local changes or untracked files. Its branch and commits are retained.", "Remove clean worktree")) return;
                         await _repo!.RemoveWorktreeAsync(tree.Path); await LoadManagement();
+                    }))));
+                break;
+            case "Rewrite":
+                page.Children.Add(Section("Rewrite local history", Paragraph("These operations change commits that already exist. Gitland records the previous HEAD under Recovery first, and a rewritten branch needs a forced push to reach a remote."),
+                    Actions(RepoAction("Interactive rebase…", InteractiveRebaseDialog), RepoAction("Hard reset…", HardResetDialog), RepoAction("Amend last commit…", AmendDialog))));
+                page.Children.Add(Section("Apply commits", Paragraph("Bring individual commits onto this branch, or undo one."),
+                    Actions(RepoAction("Cherry-pick…", () => HistoryDialog("cherry-pick", "")), RepoAction("Cherry-pick a run…", CherryPickRangeDialog), RepoAction("Revert…", RevertDialog))));
+                page.Children.Add(Section("Where HEAD has been", Paragraph("Git's reflog records every move of HEAD, including commits no branch points at any more."),
+                    RepoAction("Show reflog", async () => {
+                        var entries = await _repo!.ReadReflogAsync();
+                        if (entries.Count == 0) { _status.Text = "The reflog is empty."; return; }
+                        await ShowListDialog("Reflog", entries.Select(e => $"{e.Selector,-16} {e.ShortHash}  {e.Action,-14} {e.Subject}").ToArray());
+                    })));
+                break;
+            case "Advanced":
+                page.Children.Add(Section("Find a breaking commit", Paragraph("Bisect walks the history between a known good and a known bad commit, halving the range each time you mark the checkout."),
+                    Actions(RepoAction("Start bisect…", BisectDialog), RepoAction("Mark good", () => MarkBisect("good")), RepoAction("Mark bad", () => MarkBisect("bad")), RepoAction("Skip", () => MarkBisect("skip")), RepoAction("End bisect", async () => { await _repo!.ResetBisectAsync(); await LoadManagement(); _status.Text = "Bisect ended."; }))));
+                page.Children.Add(Section("Nested repositories", Paragraph("Submodules pin another repository at a specific commit."),
+                    Actions(RepoAction("Add submodule…", AddSubmoduleDialog), RepoAction("Update and init", async () => { await _repo!.UpdateSubmodulesAsync(); await LoadManagement(); _status.Text = "Submodules updated."; }), RepoAction("Sync URLs", async () => { await _repo!.SyncSubmodulesAsync(); _status.Text = "Submodule URLs synced."; }), RepoAction("List", async () => {
+                        var modules = await _repo!.ReadSubmodulesAsync();
+                        if (modules.Count == 0) { _status.Text = "This repository has no submodules."; return; }
+                        await ShowListDialog("Submodules", modules.Select(m => $"{(m.Initialized ? "ready " : "absent")}  {m.Path,-32} {m.Url}").ToArray());
+                    }))));
+                page.Children.Add(Section("Large files", Paragraph("Git LFS replaces matching files with pointers. Patterns live in .gitattributes."),
+                    Actions(RepoAction("Track a pattern…", LfsDialog), RepoAction("Show patterns", async () => {
+                        var patterns = await _repo!.ReadLfsPatternsAsync();
+                        if (patterns.Count == 0) { _status.Text = "No LFS patterns are configured."; return; }
+                        await ShowListDialog("Git LFS patterns", patterns.Select(p => p.Pattern).ToArray());
+                    }))));
+                page.Children.Add(Section("Patches and export", Paragraph("Move a change between checkouts without a remote, or export a revision's files."),
+                    Actions(RepoAction("Export working tree…", () => ExportPatchDialog("")), RepoAction("Apply patch…", ApplyPatchDialog), RepoAction("Archive revision…", ArchiveDialog))));
+                page.Children.Add(Section("Hooks and signatures", Paragraph("Hooks run on Git events; .sample files are inactive until renamed."),
+                    Actions(RepoAction("Show hooks", async () => {
+                        var hooks = await _repo!.ReadHooksAsync();
+                        if (hooks.Count == 0) { _status.Text = "This repository has no hooks folder."; return; }
+                        await ShowListDialog("Hooks", hooks.Select(h => $"{(h.Enabled ? "active  " : "inactive")}  {h.Name}").ToArray());
+                    }), RepoAction("Verify HEAD signature", async () => {
+                        var status = await _repo!.VerifySignatureAsync("HEAD");
+                        _status.Text = status.Code == "N" ? "HEAD is not signed." : $"HEAD signature {status.Code} · {status.Signer} {status.Key}".TrimEnd();
                     }))));
                 break;
             case "Recovery":
