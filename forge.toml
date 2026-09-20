@@ -1,6 +1,6 @@
 [app]
 name = "Gitland"
-version = "0.9.0"
+version = "0.9.1"
 id = "com.fezcode.gitland"
 icon = "src/Gitland.App/Assets/gitland.ico"
 
@@ -18,7 +18,7 @@ window_title = "Gitland Setup"
 default_dir = "${LOCALAPPDATA}/Programs/Gitland"
 
 [uninstall]
-settings_dirs = ["${LOCALAPPDATA}/Fezcode/Gitland"]
+settings_dirs = ["${LOCALAPPDATA}/Gitland"]
 
 [[steps]]
 type = "welcome"
@@ -51,10 +51,10 @@ target = "${INSTALLDIR}/gitland.exe"
 label = "Open Gitland"
 checked = true
 
-# The self-contained publish output. `src` is the one path that does not expand
-# variables, so the release build stages the payload at a fixed location.
+# The self-contained publish output from build.ps1 -Payload. `src` is the one path
+# that does not expand variables, so the payload always sits at a fixed location.
 [[dirs]]
-src = "dist/payload"
+src = "dist/win-x64"
 dst = "${INSTALLDIR}"
 
 [[shortcuts]]

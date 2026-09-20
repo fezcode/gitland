@@ -4,15 +4,15 @@
 
 A native Git client for Windows, built around readable diffs, three-way review, and an editable merge result. Clockt’s **Xcode Dark** palette, configurable typography, and a resizable workspace keep your code at the center.
 
-[**Download for Windows x64**](https://github.com/fezcode/gitland/releases/latest) · [Release notes](docs/releases/0.9.0.md) · [Workflow guide](docs/git-client.md)
+[**Download for Windows x64**](https://github.com/fezcode/gitland/releases/latest) · [Release notes](docs/releases/0.9.1.md) · [Workflow guide](docs/git-client.md)
 
 ## Get started
 
-1. Download `Gitland-0.9.0-win-x64.zip` from Releases and extract the entire folder.
+1. Download `Gitland-Setup-0.9.1.exe` from Releases and run it.
 2. Run `gitland.exe`.
 3. Choose **Open repository**, **Clone repository**, or **Create repository**.
 
-The Windows release includes the .NET runtime. Install [Git for Windows](https://gitforwindows.org/) and keep `git` on PATH. GitHub publishing and release management additionally use the [GitHub CLI](https://cli.github.com/) and your existing `gh` authentication. The app starts empty, with no sample repository or generated history.
+The installer places Gitland in `%LOCALAPPDATA%\Programs\Gitland`, creates the shortcuts you select, and registers an uninstall entry in Apps & Features. Your settings live in `%LOCALAPPDATA%\Gitland` and are removed only if you ask the uninstaller to. The Windows release includes the .NET runtime. Install [Git for Windows](https://gitforwindows.org/) and keep `git` on PATH. GitHub publishing and release management additionally use the [GitHub CLI](https://cli.github.com/) and your existing `gh` authentication. The app starts empty, with no sample repository or generated history.
 
 You can also launch a repository directly:
 
@@ -86,11 +86,15 @@ Install the **.NET 10 SDK** and Git, then run:
 ./run.ps1 -Repository 'C:\Projects\my-repository'
 ```
 
-`build.ps1` runs core/integration tests against temporary repositories, exercises native controls offscreen, renders validation images, and publishes a framework-dependent build to `dist/Gitland-0.9.0`. The GitHub ZIP is self-contained:
+`build.ps1` runs core/integration tests against temporary repositories, exercises native controls offscreen, renders validation images, and publishes a framework-dependent build to `dist/Gitland-0.9.1`. `./build.ps1 -Payload` also publishes the self-contained payload the installer ships, to `dist/win-x64`.
+
+The Windows installer is built by Forge from `forge.toml`:
 
 ```powershell
-dotnet publish src/Gitland.App/Gitland.App.csproj -c Release -r win-x64 --self-contained true -o dist/Gitland-0.9.0-win-x64
+./installer.ps1
 ```
+
+`installer.ps1` builds and tests, publishes the self-contained payload to `dist/win-x64`, and writes `dist/installer/Gitland-Setup-0.9.1.exe`. It needs the sibling `../Forge` checkout with `build/forge.exe` and `build/uninstall.exe` present. `./version.ps1 -Bump patch` moves the version through every place it is written by hand; `./version.ps1` on its own verifies those places agree. [Release flow](AGENTS.md).
 
 The app project contains no sample data. Deterministic fixtures belong to `tools/Gitland.Preview` and are injected only by that validation host. GitHub command tests simulate hosted operations; Git integration tests use local temporary repositories and remotes.
 
