@@ -137,9 +137,12 @@ public sealed partial class MainWindow : Window {
     }
     async Task SetMode(string mode) {
         if (!await MayLeaveMerge()) return;
+        // Watching a whole folder costs nothing once the table is off screen.
+        if (mode != "workspace") WatchWorkspace(null);
         if (mode == "merge") { _fileScope = "conflicts"; _filter = "all"; }
         if (mode == "changes") _fileScope = "changed";
         _mode = mode; _selected = null; _externalLeft = null; RenderNavigation(); RenderContext(); RenderFiles();
+        if (mode == "workspace") { await EnterWorkspace(); return; }
         if (_repo == null && _fixture == null && mode != "threeway") { ShowWelcome(); return; }
         if (mode is "repository" or "github") { await LoadManagement(); return; }
         if (mode == "threeway") { await EnterThreeWay(); return; }
@@ -321,6 +324,7 @@ public sealed partial class MainWindow : Window {
     }
     public async Task OpenRepository(string path) {
         if (!await MayLeaveMerge()) return;
+        WatchWorkspace(null);
         var repo = await GitRepository.OpenAsync(path); var state = await repo.ReadStateAsync();
         var management = await repo.ReadManagementAsync();
         _checked.Clear();
@@ -336,6 +340,7 @@ public sealed partial class MainWindow : Window {
         if (!await MayLeaveMerge()) return;
         if (_mode == "threeway" && _threeLocalPaths != null) { await ShowThreeLocalFiles(_threeLocalPaths); return; }
         if (_mode == "files" && _externalLeft != null && _externalRight != null) { await ShowLocalFiles(_externalLeft, _externalRight); return; }
+        if (_mode == "workspace") { await ScanWorkspace(); return; }
         if (_repo == null) { _status.Text = "Open a repository to refresh its changes."; return; }
         _state = await _repo.ReadStateAsync(); _management = await _repo.ReadManagementAsync();
         // A refresh can arrive from the watcher while files are ticked; keep the ones still there.
@@ -385,6 +390,8 @@ public sealed partial class MainWindow : Window {
         _ = RunCore(action);
     }
     public bool IsWorking => _busy;
+    /// <summary>The repository currently open, or null on the welcome screen.</summary>
+    public string? RepositoryRoot => _repo?.Root;
     async Task RunCore(Func<Task> action) {
         _busy = true; UpdateMenus(); _status.Text = "Working…";
         try { await action(); }

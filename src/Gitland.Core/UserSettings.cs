@@ -2,14 +2,17 @@ using System.Text.Json;
 
 namespace Gitland.Core;
 
-public sealed record UserSettings(string Theme = "xcode-dark", double CodeSize = 13, bool HoswlEnabled = false, bool DefaultUnified = false, bool SyncMergeScroll = true, string InterfaceFont = "geist", string CodeFont = "geist-mono", double SidebarWidth = 0, IReadOnlyList<string>? RecentRepositories = null) {
+public sealed record UserSettings(string Theme = "xcode-dark", double CodeSize = 13, bool HoswlEnabled = false, bool DefaultUnified = false, bool SyncMergeScroll = true, string InterfaceFont = "geist", string CodeFont = "geist-mono", double SidebarWidth = 0, IReadOnlyList<string>? RecentRepositories = null, string? WorkspaceRoot = null) {
     public UserSettings Normalize() => this with {
         Theme = Theme is "xcode-dark" or "graphite" or "midnight" or "paper" ? Theme : "xcode-dark",
         CodeSize = double.IsFinite(CodeSize) ? Math.Clamp(CodeSize, 11, 18) : 13,
         InterfaceFont = InterfaceFont is "geist" or "inter" or "modern" or "geometric" or "windows" or "swiss" or "editorial" or "monospace" ? InterfaceFont : "geist",
         CodeFont = CodeFont is "geist-mono" or "cascadia-code" or "consolas" ? CodeFont : "geist-mono",
         SidebarWidth = !double.IsFinite(SidebarWidth) || SidebarWidth <= 0 ? 0 : Math.Clamp(SidebarWidth, 220, 600),
-        RecentRepositories = Recent(RecentRepositories)
+        RecentRepositories = Recent(RecentRepositories),
+        // Path.TrimEndingDirectorySeparator leaves a drive root alone, so "D:\\" does not become the
+        // relative "D:" and start resolving against the process working directory.
+        WorkspaceRoot = string.IsNullOrWhiteSpace(WorkspaceRoot) ? null : Path.TrimEndingDirectorySeparator(WorkspaceRoot.Trim())
     };
 
     // A record compares a list property by reference, so a saved settings object would never equal
@@ -20,12 +23,13 @@ public sealed record UserSettings(string Theme = "xcode-dark", double CodeSize =
         && Theme == other.Theme && CodeSize.Equals(other.CodeSize) && HoswlEnabled == other.HoswlEnabled
         && DefaultUnified == other.DefaultUnified && SyncMergeScroll == other.SyncMergeScroll
         && InterfaceFont == other.InterfaceFont && CodeFont == other.CodeFont && SidebarWidth.Equals(other.SidebarWidth)
+        && WorkspaceRoot == other.WorkspaceRoot
         && (RecentRepositories ?? []).SequenceEqual(other.RecentRepositories ?? [], StringComparer.Ordinal);
 
     public override int GetHashCode() {
         var hash = new HashCode();
         hash.Add(Theme); hash.Add(CodeSize); hash.Add(HoswlEnabled); hash.Add(DefaultUnified);
-        hash.Add(SyncMergeScroll); hash.Add(InterfaceFont); hash.Add(CodeFont); hash.Add(SidebarWidth);
+        hash.Add(SyncMergeScroll); hash.Add(InterfaceFont); hash.Add(CodeFont); hash.Add(SidebarWidth); hash.Add(WorkspaceRoot);
         foreach (string path in RecentRepositories ?? []) hash.Add(path, StringComparer.Ordinal);
         return hash.ToHashCode();
     }

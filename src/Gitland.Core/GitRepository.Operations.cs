@@ -98,7 +98,10 @@ public sealed partial class GitRepository {
     public async Task SaveStashAsync(string message, bool includeUntracked) {
         if (await OperationAsync() != "" || (await ReadStateAsync()).Changes.Any(c => c.IsConflict)) throw new InvalidOperationException("Finish the current merge or rebase before stashing.");
         if (!await HasHead()) throw new InvalidOperationException("Create the repository's first commit before using a stash.");
-        await Git("stash", "push", includeUntracked ? "--include-untracked" : "--no-include-untracked", "-m", string.IsNullOrWhiteSpace(message) ? "Gitland stash" : message);
+        // Git 2.55 stashes an untracked file but leaves it in the working tree when
+        // --literal-pathspecs is in force, so a "clean" checkout still holds the file the stash
+        // claims to have taken. This call passes no pathspec, so the flag guards nothing here.
+        await RunAsync(["stash", "push", includeUntracked ? "--include-untracked" : "--no-include-untracked", "-m", string.IsNullOrWhiteSpace(message) ? "Gitland stash" : message], literalPathspecs: false);
     }
     public async Task<GitOperationResult> ApplyStashAsync(string hash, bool dropAfter) {
         await RequireClean(); string pinned = await ResolveRef(hash);

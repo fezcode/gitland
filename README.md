@@ -4,11 +4,11 @@
 
 A native Git client for Windows, built around readable diffs, three-way review, and an editable merge result. Clockt’s **Xcode Dark** palette, configurable typography, and a resizable workspace keep your code at the center.
 
-[**Download for Windows x64**](https://github.com/fezcode/gitland/releases/latest) · [Release notes](docs/releases/0.13.0.md) · [Workflow guide](docs/git-client.md)
+[**Download for Windows x64**](https://github.com/fezcode/gitland/releases/latest) · [Release notes](docs/releases/0.14.0.md) · [Workflow guide](docs/git-client.md)
 
 ## Get started
 
-1. Download `Gitland-Setup-0.13.0.exe` from Releases and run it.
+1. Download `Gitland-Setup-0.14.0.exe` from Releases and run it.
 2. Run `gitland.exe`.
 3. Choose **Open repository**, **Clone repository**, or **Create repository**.
 
@@ -21,6 +21,22 @@ You can also launch a repository directly:
 ```powershell
 .\gitland.exe 'C:\Projects\my-repository'
 ```
+
+## Many repositories at once
+
+**Workspace** watches a folder that holds your repositories and puts them in one table: branch, uncommitted changes, commits ahead or behind the remote, and how many remotes each has. Choose the folder once and it is remembered. Only repositories directly inside it are listed; nothing nested deeper.
+
+| Column | Shows |
+| --- | --- |
+| Changes | `clean`, or `+` new, `~` modified, `−` deleted, `!` conflicted |
+| Sync | `↑` commits to push, `↓` commits to pull |
+| Remotes | How many remotes, or `local` for none |
+
+Filter by name, or narrow to **Unclean** (uncommitted work or unsynced commits) or **Clean**. Choose a row to open that repository. Right-click one to reveal it in File Explorer, copy its path, or fetch just that repository.
+
+**Fetch all** refreshes the ahead/behind counts without touching your branches. **Pull all** and **Push all** name every repository they would change and do nothing unless you confirm; pull skips repositories with uncommitted changes, push covers only those with commits waiting, and nothing is ever forced.
+
+The folder is watched while the view is open, so a commit you make elsewhere updates its row on its own. Leaving the view stops the watching.
 
 ## Review and commit
 
@@ -48,6 +64,7 @@ Magic resolve runs locally using deterministic text analysis. Review and test th
 
 | Area | Available actions |
 | --- | --- |
+| Workspace | Scan a folder, review every repository in it, fetch/pull/push across them |
 | Repositories | Open, create, clone, publish to GitHub |
 | History | Parent-derived graph, all branches, inspect commits, load more; search by message or author, and history for a single file |
 | Branches | Create, switch, rename, delete, merge, rebase, interactive rebase |
@@ -69,7 +86,7 @@ Pushes are normal by default; a forced push uses `--force-with-lease`, so it ref
 - Four themes: **Xcode Dark**, **Graphite**, **Midnight**, and **Paper**.
 - Independent interface and source fonts. Geist, Geist Mono, Inter, IBM Plex Sans, Cascadia Code, and Source Serif 4 are bundled; installed proprietary families have explicit fallbacks. [Font guide](docs/fonts.md).
 - Drag the sidebar divider; use arrow keys when focused; double-click to reset. Width, fonts, themes, and editor preferences persist.
-- The open repository is watched, so edits made in your editor appear without pressing F5. Refresh is still on F5, and never runs while a merge result has unsaved edits.
+- The open repository is watched, so edits made in your editor appear without pressing F5. Refresh is still on F5, and never runs while a merge result has unsaved edits. F5 rescans the Workspace table too.
 - Optional [Hisashi OS Window Layer integration](docs/hoswl-integration.md), available in **Settings → Integrations**.
 
 ## Keyboard
@@ -94,7 +111,7 @@ Install the **.NET 10 SDK** and Git, then run:
 ./run.ps1 -Repository 'C:\Projects\my-repository'
 ```
 
-`build.ps1` runs core/integration tests against temporary repositories, exercises native controls offscreen, renders validation images, and publishes a framework-dependent build to `dist/Gitland-0.13.0`. `./build.ps1 -Payload` also publishes the self-contained payload the installer ships, to `dist/win-x64`.
+`build.ps1` runs core/integration tests against temporary repositories, exercises native controls offscreen, renders validation images, and publishes a framework-dependent build to `dist/Gitland-0.14.0`. `./build.ps1 -Payload` also publishes the self-contained payload the installer ships, to `dist/win-x64`.
 
 The Windows installer is built by Forge from `forge.toml`:
 
@@ -102,7 +119,7 @@ The Windows installer is built by Forge from `forge.toml`:
 ./installer.ps1
 ```
 
-`installer.ps1` builds and tests, publishes the self-contained payload to `dist/win-x64`, and writes `dist/installer/Gitland-Setup-0.13.0.exe`. It needs the sibling `../Forge` checkout with `build/forge.exe` and `build/uninstall.exe` present. `./version.ps1 -Bump patch` moves the version through every place it is written by hand; `./version.ps1` on its own verifies those places agree. [Release flow](AGENTS.md).
+`installer.ps1` builds and tests, publishes the self-contained payload to `dist/win-x64`, and writes `dist/installer/Gitland-Setup-0.14.0.exe`. It needs the sibling `../Forge` checkout with `build/forge.exe` and `build/uninstall.exe` present. `./version.ps1 -Bump patch` moves the version through every place it is written by hand; `./version.ps1` on its own verifies those places agree. [Release flow](AGENTS.md).
 
 The app project contains no sample data. Deterministic fixtures belong to `tools/Gitland.Preview` and are injected only by that validation host. GitHub command tests simulate hosted operations; Git integration tests use local temporary repositories and remotes.
 

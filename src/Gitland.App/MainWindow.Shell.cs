@@ -126,9 +126,9 @@ public sealed partial class MainWindow {
     static bool IsButtonSource(object? source) => source is Visual visual && (visual is Button || visual.GetVisualAncestors().Any(v => v is Button));
     void RenderNavigation() {
         _navigation.Children.Clear();
-        foreach (var (id, label, icon) in new[] { ("changes", "Working changes", "diff"), ("compare", "Compare revisions", "compare"), ("merge", "Merge", "merge"), ("repository", "Repository", "branch"), ("tags", "Manage tags", "tag"), ("github", "GitHub & releases", "cloud") }) {
+        foreach (var (id, label, icon) in new[] { ("workspace", "Workspace", "layers"), ("changes", "Working changes", "diff"), ("compare", "Compare revisions", "compare"), ("merge", "Merge", "merge"), ("repository", "Repository", "branch"), ("tags", "Manage tags", "tag"), ("github", "GitHub & releases", "cloud") }) {
             var active = id == "merge" ? _mode is "merge" or "threeway" : id == "tags" ? _mode == "repository" && _repositoryTab == "Tags" : id == "repository" ? _mode == "repository" && _repositoryTab != "Tags" : id == _mode;
-            var shortLabel = id switch { "changes" => "Changes", "compare" => "Compare", "tags" => "Tags", "merge" => "Merge", "repository" => "History", _ => "GitHub" };
+            var shortLabel = id switch { "workspace" => "Workspace", "changes" => "Changes", "compare" => "Compare", "tags" => "Tags", "merge" => "Merge", "repository" => "History", _ => "GitHub" };
             var glyph = new Grid { Height = 22 };
             glyph.Children.Add(Icon(icon, active ? Ink : Faint, 19));
             if (id == "merge" && _state.Changes.Any(c => c.IsConflict)) glyph.Children.Add(new Border { Width = 5, Height = 5, CornerRadius = new CornerRadius(3), Background = Amber, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top });
@@ -219,7 +219,7 @@ public sealed partial class MainWindow {
         _contextBar.Children.Clear();
         _contextBar.IsVisible = true;
         if (_workspaceFrame != null && _mode == "merge") _workspaceFrame.Margin = new Thickness(8);
-        string title = _mode switch { "compare" => "Compare revisions", "threeway" => "Merge", "merge" => "Merge", "repository" => "Repository", "github" => "GitHub & releases", "files" => "Local files", _ => "Working changes" };
+        string title = _mode switch { "workspace" => "Workspace", "compare" => "Compare revisions", "threeway" => "Merge", "merge" => "Merge", "repository" => "Repository", "github" => "GitHub & releases", "files" => "Local files", _ => "Working changes" };
         _pageHeading = Col(Text(title, 22, strong: true)); _contextBar.Children.Add(_pageHeading);
         _pageControls = new WrapPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         Add(_contextBar, _pageControls, 0, 1);
@@ -241,6 +241,9 @@ public sealed partial class MainWindow {
         else if (_mode == "threeway") { _pageControls.Children.Add(Button("Choose three revisions", () => Run(ThreeWayDialog))); _pageControls.Children.Add(Button("Compare three files", () => Run(ThreeLocalFiles))); }
         else if (_mode == "repository") { var create = Button("New branch", () => Run(CreateBranchDialog), "branch"); create.IsEnabled = _repo != null; _pageControls.Children.Add(create); }
         else if (_mode == "merge") { int count = _state.Changes.Count(c => c.IsConflict); _pageControls.Children.Add(Text($"{count} conflicted {(count == 1 ? "file" : "files")}", 11, Amber)); }
+        // The folder and the repository count are already the page's own heading; the context bar
+        // adds only the one number that is not visible without reading every row.
+        else if (_mode == "workspace") _pageControls.Children.Add(Text(_workspaceRows.Count == 0 ? "" : $"{_workspaceRows.Count(Unclean)} of {_workspaceRows.Count} need attention", 11, Faint));
         else if (_mode == "files") _pageControls.Children.Add(Text("Read only", 11, Faint));
         else if (_mode == "github") _pageControls.Children.Add(Text(_githubUser == null ? "Not connected" : "@" + _githubUser, 11, Faint));
         UpdatePageDensity();

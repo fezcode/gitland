@@ -116,6 +116,16 @@ public sealed class RecentRepositoryTests {
         Assert.Equal([@"C:\b"], settings.RecentRepositories);
     }
 
+    [Fact] public void TheWorkspaceRootKeepsItsPathButLosesATrailingSlash() =>
+        Assert.Equal(@"D:\Workhammer", new UserSettings(WorkspaceRoot: @"D:\Workhammer\").Normalize().WorkspaceRoot);
+
+    /// <summary>A blank root is the same as no root, so the Workspace view asks for one rather than
+    /// scanning the process working directory.</summary>
+    [Fact] public void ABlankWorkspaceRootNormalizesToNoRootAtAll() {
+        Assert.Null(new UserSettings(WorkspaceRoot: "   ").Normalize().WorkspaceRoot);
+        Assert.Null(new UserSettings().Normalize().WorkspaceRoot);
+    }
+
     [Fact] public void ARepairedSettingsFileDropsBlanksAndDuplicates() {
         var settings = new UserSettings(RecentRepositories: ["", "  ", @"C:\a", @"C:\a\", @"C:\b"]).Normalize();
         Assert.Equal([@"C:\a", @"C:\b"], settings.RecentRepositories);
@@ -150,6 +160,7 @@ public sealed class RecentRepositoryTests {
             baseline with { CodeFont = "consolas" },
             baseline with { SidebarWidth = 300 },
             baseline with { RecentRepositories = new List<string> { @"C:\a" } },
+            baseline with { WorkspaceRoot = @"D:\Workhammer" },
         };
         // One entry per settable property; if the record grows, this count fails first.
         Assert.Equal(typeof(UserSettings).GetProperties().Count(p => p.CanWrite), changed.Length);

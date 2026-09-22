@@ -34,10 +34,10 @@ public sealed partial class GitRepository {
     }
 
     public async Task<string> Git(params string[] args) => await RunAsync(args);
-    async Task<CommandResult> RunResultAsync(string[] args, string? input = null, int timeout = 30, IReadOnlyDictionary<string, string>? environment = null) =>
-        await _runner.RunAsync(new("git", Root, ["--literal-pathspecs", "-c", "core.quotepath=false", ..args], input, timeout, environment));
-    async Task<string> RunAsync(string[] args, string? input = null, bool allowOne = false, int timeout = 30, IReadOnlyDictionary<string, string>? environment = null) {
-        var result = await RunResultAsync(args, input, timeout, environment);
+    async Task<CommandResult> RunResultAsync(string[] args, string? input = null, int timeout = 30, IReadOnlyDictionary<string, string>? environment = null, bool literalPathspecs = true) =>
+        await _runner.RunAsync(new("git", Root, [..literalPathspecs ? new[] { "--literal-pathspecs" } : [], "-c", "core.quotepath=false", ..args], input, timeout, environment));
+    async Task<string> RunAsync(string[] args, string? input = null, bool allowOne = false, int timeout = 30, IReadOnlyDictionary<string, string>? environment = null, bool literalPathspecs = true) {
+        var result = await RunResultAsync(args, input, timeout, environment, literalPathspecs);
         if (result.ExitCode != 0 && !(allowOne && result.ExitCode == 1)) throw new CommandFailedException(string.IsNullOrWhiteSpace(result.Error) ? $"Git exited with code {result.ExitCode}. {result.Output.Trim()}" : result.Error.Trim(), result.ExitCode);
         return result.Output;
     }

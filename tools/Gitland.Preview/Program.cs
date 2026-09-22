@@ -499,7 +499,62 @@ async Task ExerciseRepository() {
     Check(window.GetVisualDescendants().OfType<DiffCanvas>().All(c => c.Rows.Any(r => r.Right == "refreshed local source")), "Refreshing a local three-way comparison rereads all three sources.");
     Click("Working changes"); await WaitForAction(); Click("Merge"); await WaitForAction(); Click("Three-way comparison"); await WaitForAction();
     Check(window.GetVisualDescendants().OfType<DiffCanvas>().Count() == 3, "Local three-way comparison survives workspace navigation.");
-    foreach (var fixture in new[] { root, otherRoot }) {
+
+    // ---- Workspace: every repository in one folder, at a glance -------------
+    async Task<GitRepository> Fixture(string suffix) {
+        string folder = root + suffix; Directory.CreateDirectory(folder);
+        var created = new GitRepository(folder);
+        await created.Git("init", "-b", "main"); await created.Git("config", "user.name", "Gitland UI Test"); await created.Git("config", "user.email", "gitland-ui@example.invalid"); await created.Git("config", "core.autocrlf", "false");
+        await File.WriteAllTextAsync(Path.Combine(folder, "readme.txt"), "base\n"); await created.Git("add", "."); await created.Git("commit", "-m", "Base");
+        return created;
+    }
+    // Three shapes the table has to tell apart: committed and in sync, committed but unpushed,
+    // and uncommitted work.
+    var syncedRoot = root + "-synced"; await Fixture("-synced");
+    var aheadRoot = root + "-ahead"; var aheadRepo = await Fixture("-ahead");
+    string originRoot = Path.Combine(output, "ui-fixture-origin.git");
+    await new GitRepository(output).Git("init", "--bare", "ui-fixture-origin.git");
+    await aheadRepo.Git("remote", "add", "origin", originRoot); await aheadRepo.Git("push", "-u", "origin", "main");
+    await File.WriteAllTextAsync(Path.Combine(aheadRoot, "readme.txt"), "one commit ahead\n"); await aheadRepo.Git("add", "."); await aheadRepo.Git("commit", "-m", "Ahead");
+    await File.WriteAllTextAsync(Path.Combine(otherRoot, "scratch.txt"), "untracked work\n");
+    string syncedName = Path.GetFileName(syncedRoot), aheadName = Path.GetFileName(aheadRoot), otherName = Path.GetFileName(otherRoot);
+    string RowText(string repository) => string.Join(" ", Buttons(repository).Single().GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text));
+
+    Check(Buttons("Workspace").Length == 1, "A Workspace entry sits in the navigation rail.");
+    await window.OpenWorkspace(output); await WaitForAction();
+    Check(Buttons(syncedName).Length == 1 && Buttons(aheadName).Length == 1 && Buttons(otherName).Length == 1, "Workspace lists every repository sitting directly inside the scanned folder.");
+    Check(!Buttons("ui-fixture-origin.git").Any(), "A bare repository beside the working copies is not offered as a row to open.");
+    Check(RowText(syncedName).Contains("clean"), "A committed, in-sync repository reads as clean.");
+    Check(RowText(aheadName).Contains("clean") && RowText(aheadName).Contains("↑1"), "A committed but unpushed repository reads as clean and one commit ahead.");
+    Check(RowText(otherName).Contains("+1"), "A repository holding one untracked file reports it as an addition.");
+    Save("workspace.png");
+    Click("Unclean repositories");
+    Check(!Buttons(syncedName).Single().IsVisible && Buttons(aheadName).Single().IsVisible && Buttons(otherName).Single().IsVisible,
+        "The Unclean filter keeps repositories with uncommitted work or unsynced commits, and hides the rest.");
+    Click("Clean repositories");
+    Check(Buttons(syncedName).Single().IsVisible && !Buttons(aheadName).Single().IsVisible && !Buttons(otherName).Single().IsVisible,
+        "The Clean filter keeps only repositories that are committed and in sync.");
+    Click("All repositories");
+    var repositoryFilter = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "WorkspaceFilter");
+    repositoryFilter.Text = aheadName; Pump();
+    Check(Buttons(aheadName).Single().IsVisible && !Buttons(otherName).Single().IsVisible, "The name filter narrows the table to matching repositories.");
+    repositoryFilter.Text = ""; Pump();
+
+    // Pushing across a whole folder is the one action here that publishes, so it must say what it
+    // would touch and do nothing at all when refused.
+    Click("Push all");
+    var pushDeadline = DateTime.UtcNow.AddSeconds(20); while (window.OwnedWindows.Count == 0 && DateTime.UtcNow < pushDeadline) await Task.Delay(20); Pump();
+    var pushDialog = window.OwnedWindows.Single();
+    string pushPrompt = string.Join(" ", pushDialog.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text));
+    Check(pushPrompt.Contains(aheadName) && !pushPrompt.Contains(otherName) && !pushPrompt.Contains(syncedName), "Push all asks first, naming only the repositories that have somewhere to push.");
+    pushDialog.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Cancel").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); await WaitForAction();
+    Check((await new GitRepository(originRoot).Git("log", "--oneline")).Split('\n', StringSplitOptions.RemoveEmptyEntries).Length == 1, "Refusing Push all leaves every remote exactly as it was.");
+
+    Click(aheadName); await WaitForAction();
+    Check(window.RepositoryRoot == Path.GetFullPath(aheadRoot), "Choosing a row opens that repository for review.");
+    Check(Buttons("Working changes").Single().Classes.Contains("selected"), "Opening a repository from the table lands in Working changes.");
+
+    foreach (var fixture in new[] { root, otherRoot, syncedRoot, aheadRoot, originRoot }) {
         if (!Path.GetFullPath(fixture).StartsWith(output + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || !Path.GetFileName(fixture).StartsWith("ui-fixture-")) throw new InvalidOperationException("Fixture escaped the preview directory.");
         foreach (var file in Directory.EnumerateFiles(fixture, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
         Directory.Delete(fixture, true);

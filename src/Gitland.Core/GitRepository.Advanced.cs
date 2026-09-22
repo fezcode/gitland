@@ -102,8 +102,9 @@ public sealed partial class GitRepository {
         if (kind is not ("good" or "bad" or "skip")) throw new ArgumentException("Mark a bisect step good, bad or skip.");
         var result = await RunResultAsync(["bisect", kind], timeout: 120);
         if (result.ExitCode != 0) throw new CommandFailedException(result.Error.Trim(), result.ExitCode);
-        // Git announces the answer on stdout once the range collapses to one commit.
-        var found = Regex.Match(result.Output, @"([0-9a-f]{40}) is the first bad commit");
+        // Git announces the answer on stdout once the range collapses to one commit. Git 2.55
+        // quotes the term ("is the first 'bad' commit"); older releases do not.
+        var found = Regex.Match(result.Output, @"([0-9a-f]{40}) is the first '?bad'? commit");
         return found.Success ? found.Groups[1].Value : "";
     }
 

@@ -17,7 +17,8 @@ public sealed partial class MainWindow {
         var actions = Col(
             WelcomeAction("Open repository", "Continue with a folder on this computer", "folder", PickRepository),
             WelcomeAction("Clone repository", "Bring a remote repository to this computer", "cloud", CloneDialog),
-            WelcomeAction("Create repository", "Start a new Git history in a local folder", "plus", CreateRepositoryDialog));
+            WelcomeAction("Create repository", "Start a new Git history in a local folder", "plus", CreateRepositoryDialog),
+            WelcomeAction("Scan a folder", "See every repository in one place, and what each one is waiting on", "layers", ChooseWorkspaceFolder));
         actions.Spacing = 8; content.Children.Add(actions);
         content.Children.Add(Button("Compare local files", () => Run(CompareLocalFiles), "compare"));
         if (RecentRepositories() is { Count: > 0 } recent) content.Children.Add(RecentSection(recent));
