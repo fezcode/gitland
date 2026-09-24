@@ -14,6 +14,7 @@ public sealed partial class MainWindow {
     IReadOnlyList<RepoSummary> _workspaceRows = [];
     string _workspaceShow = "all";
     int _workspaceScanId;
+    bool _workspaceScanning;
     FileSystemWatcher? _workspaceWatcher;
     DispatcherTimer? _workspaceTimer;
     readonly HashSet<string> _workspaceTouched = new(StringComparer.OrdinalIgnoreCase);
@@ -45,7 +46,12 @@ public sealed partial class MainWindow {
     async Task ScanWorkspace() {
         int id = ++_workspaceScanId;
         string? root = WorkspaceRoot;
-        var rows = root == null ? [] : await WorkspaceScan.ScanAsync(root);
+        // Until the scan answers, the table would claim the folder is empty; say it is being read.
+        _workspaceScanning = root != null;
+        if (root != null && _mode == "workspace") { RenderWorkspace(); _status.Text = "Scanning " + root + "…"; }
+        IReadOnlyList<RepoSummary> rows;
+        try { rows = root == null ? [] : await WorkspaceScan.ScanAsync(root); }
+        finally { if (id == _workspaceScanId) _workspaceScanning = false; }
         if (id != _workspaceScanId) return;
         _workspaceRows = rows;
         if (_mode == "workspace") { RenderWorkspace(); RenderContext(); }
@@ -135,16 +141,20 @@ public sealed partial class MainWindow {
         string? root = WorkspaceRoot;
         var page = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*") };
 
-        var heading = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 18, Margin = new Thickness(20, 18, 20, 14) };
-        var title = Col(Text(root ?? "No folder chosen", 14, strong: true), Text(root == null ? "Choose a folder that holds your repositories." : $"{_workspaceRows.Count} {(_workspaceRows.Count == 1 ? "repository" : "repositories")} directly inside this folder", 11, Faint));
+        var heading = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), RowDefinitions = new RowDefinitions("Auto,Auto"), ColumnSpacing = 18, Margin = new Thickness(20, 18, 20, 14) };
+        string summaryLine = root == null ? "Choose a folder that holds your repositories."
+            : _workspaceScanning ? "Scanning for repositories…"
+            : $"{_workspaceRows.Count} {(_workspaceRows.Count == 1 ? "repository" : "repositories")} directly inside this folder";
+        var title = Col(Text(root ?? "No folder chosen", 14, strong: true), Text(summaryLine, 11, Faint));
         title.Spacing = 6; heading.Children.Add(title);
         var choose = Button(root == null ? "Choose folder" : "Change folder", () => Run(ChooseWorkspaceFolder), "folder");
-        var rescan = Button("Rescan", () => Run(ScanWorkspace), "refresh"); rescan.IsEnabled = root != null;
+        var rescan = Button("Rescan", () => Run(ScanWorkspace), "refresh"); rescan.IsEnabled = root != null && !_workspaceScanning;
         var fetchAll = Button("Fetch all", () => Run(() => WorkspaceBulk("fetch")), "down");
         var pullAll = Button("Pull all", () => Run(() => WorkspaceBulk("pull")));
         var pushAll = Button("Push all", () => Run(() => WorkspaceBulk("push")), "up");
-        foreach (var bulk in new[] { fetchAll, pullAll, pushAll }) bulk.IsEnabled = root != null && _workspaceRows.Count > 0;
-        Add(heading, WrapActions(choose, rescan, fetchAll, pullAll, pushAll), 0, 1);
+        foreach (var bulk in new[] { fetchAll, pullAll, pushAll }) bulk.IsEnabled = root != null && _workspaceRows.Count > 0 && !_workspaceScanning;
+        var actions = WrapActions(choose, rescan, fetchAll, pullAll, pushAll);
+        Add(heading, actions, 0, 1);
         Add(page, heading, 0);
 
         var search = new TextBox { Watermark = "Filter repositories by name", Name = "WorkspaceFilter", FontSize = 12 };
@@ -159,7 +169,8 @@ public sealed partial class MainWindow {
 
         var list = new StackPanel();
         var rows = new List<(Control Row, RepoSummary Summary)>();
-        foreach (var summary in _workspaceRows) rows.Add((WorkspaceRow(summary), summary));
+        var tables = new List<Grid> { columns };
+        foreach (var summary in _workspaceRows) { var row = WorkspaceRow(summary, out var cells); rows.Add((row, summary)); tables.Add(cells); }
         foreach (var (control, _) in rows) list.Children.Add(control);
 
         void Apply() {
@@ -192,13 +203,36 @@ public sealed partial class MainWindow {
         search.TextChanged += (_, _) => Apply();
         Apply();
 
-        if (root == null) list.Children.Add(WorkspaceNotice("No folder chosen", "Choose a folder such as D:\\Projects and every Git repository directly inside it appears here."));
+        if (_workspaceScanning && _workspaceRows.Count == 0) {
+            var notice = WorkspaceNotice("Scanning for repositories", "Reading every folder directly inside " + root + ". Large folders take a moment.");
+            ((StackPanel)notice).Children.Insert(0, new ProgressBar { IsIndeterminate = true, Width = 160, Height = 3, MinHeight = 3, Foreground = Accent, Background = Hairline, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 6) });
+            list.Children.Add(notice);
+        }
+        else if (root == null) list.Children.Add(WorkspaceNotice("No folder chosen", "Choose a folder such as D:\\Projects and every Git repository directly inside it appears here."));
         else if (_workspaceRows.Count == 0) list.Children.Add(WorkspaceNotice("No repositories here", "Nothing directly inside " + root + " is a Git repository. Repositories nested deeper are not listed."));
         Add(page, new ScrollViewer { Content = list, Margin = new Thickness(20, 0, 20, 12), HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }, 3);
+
+        // A narrow window cannot fit five fixed columns: the actions drop below the folder name,
+        // and the least important columns go first, so the repository name always has room.
+        double laidOut = -1;
+        page.SizeChanged += (_, _) => {
+            double width = page.Bounds.Width;
+            if (Math.Abs(width - laidOut) < 1) return;
+            laidOut = width;
+            bool stacked = width < 820;
+            Grid.SetRow(actions, stacked ? 1 : 0); Grid.SetColumn(actions, stacked ? 0 : 1); Grid.SetColumnSpan(actions, stacked ? 2 : 1);
+            actions.Margin = new Thickness(0, stacked ? 12 : 0, 0, 0);
+            var widths = width >= 760 ? FullColumns : width >= 580 ? new[] { 130d, 120, 70, 0 } : new[] { 110d, 100, 0, 0 };
+            foreach (var table in tables) {
+                for (int i = 0; i < widths.Length; i++) table.ColumnDefinitions[i + 1].Width = new GridLength(widths[i]);
+                foreach (var cell in table.Children) { int column = Grid.GetColumn(cell); if (column > 0) cell.IsVisible = widths[column - 1] > 0; }
+            }
+        };
         _workspace.Content = page;
     }
 
     const string RowColumns = "*,150,150,92,78";
+    static readonly double[] FullColumns = [150, 150, 92, 78];
 
     static Control WorkspaceNotice(string title, string detail) {
         var notice = Col(Text(title, 14, strong: true), new TextBlock { Text = detail, Foreground = Faint, FontSize = 12, TextWrapping = TextWrapping.Wrap, MaxWidth = 460 });
@@ -207,9 +241,13 @@ public sealed partial class MainWindow {
         return notice;
     }
 
-    Button WorkspaceRow(RepoSummary summary) {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions(RowColumns), ColumnSpacing = 14 };
-        grid.Children.Add(Row(Icon(summary.Error != null ? "close" : "folder", summary.Error != null ? Red : Faint, 14), Text(summary.Name, 12, summary.Error != null ? Muted : Ink, true)));
+    Button WorkspaceRow(RepoSummary summary, out Grid grid) {
+        grid = new Grid { ColumnDefinitions = new ColumnDefinitions(RowColumns), ColumnSpacing = 14 };
+        // A grid rather than a horizontal stack, so a long name is trimmed instead of spilling over.
+        var name = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 8 };
+        name.Children.Add(Icon(summary.Error != null ? "close" : "folder", summary.Error != null ? Red : Faint, 14));
+        Add(name, Text(summary.Name, 12, summary.Error != null ? Muted : Ink, true), 0, 1);
+        grid.Children.Add(name);
         Add(grid, Text(summary.Branch.Length > 0 ? summary.Branch : "—", 11, Muted), 0, 1);
 
         Control changes;

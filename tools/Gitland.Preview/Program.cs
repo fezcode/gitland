@@ -8,6 +8,7 @@ using Gitland.App;
 using Avalonia.Automation;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using Avalonia.LogicalTree;
 using Avalonia.Input;
 using Gitland.Core;
 using System.Text;
@@ -521,13 +522,23 @@ async Task ExerciseRepository() {
     string RowText(string repository) => string.Join(" ", Buttons(repository).Single().GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text));
 
     Check(Buttons("Workspace").Length == 1, "A Workspace entry sits in the navigation rail.");
-    await window.OpenWorkspace(output); await WaitForAction();
+    var opening = window.OpenWorkspace(output);
+    // The first render happens before the scan answers; it must say it is reading, not that the folder is empty.
+    var firstTexts = window.GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
+    Check(firstTexts.Contains("Scanning for repositories") && !firstTexts.Contains("No repositories here"), "Workspace shows it is scanning, not an empty folder, while the first scan runs.");
+    await opening; await WaitForAction();
     Check(Buttons(syncedName).Length == 1 && Buttons(aheadName).Length == 1 && Buttons(otherName).Length == 1, "Workspace lists every repository sitting directly inside the scanned folder.");
     Check(!Buttons("ui-fixture-origin.git").Any(), "A bare repository beside the working copies is not offered as a row to open.");
     Check(RowText(syncedName).Contains("clean"), "A committed, in-sync repository reads as clean.");
     Check(RowText(aheadName).Contains("clean") && RowText(aheadName).Contains("↑1"), "A committed but unpushed repository reads as clean and one commit ahead.");
     Check(RowText(otherName).Contains("+1"), "A repository holding one untracked file reports it as an addition.");
     Save("workspace.png");
+    double wideWidth = window.Width; window.Width = 700; Pump();
+    var narrowRow = Buttons(syncedName).Single();
+    Check(narrowRow.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == syncedName).Bounds.Width > 60, "A narrow window keeps room for the repository name.");
+    Check(!window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == "REMOTES").IsVisible, "A narrow window drops the least important columns.");
+    Save("workspace-narrow.png");
+    window.Width = wideWidth; Pump();
     Click("Unclean repositories");
     Check(!Buttons(syncedName).Single().IsVisible && Buttons(aheadName).Single().IsVisible && Buttons(otherName).Single().IsVisible,
         "The Unclean filter keeps repositories with uncommitted work or unsynced commits, and hides the rest.");
