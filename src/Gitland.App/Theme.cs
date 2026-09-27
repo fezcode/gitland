@@ -30,7 +30,7 @@ public static partial class Palette {
     public static Button Button(string label, Action action, string? icon = null, bool primary = false) {
         var caption = Text(label, 12); caption.ClearValue(TextBlock.ForegroundProperty);
         var button = new Button { Content = icon == null ? caption : Row(Icon(icon, primary ? Ink : Muted, 14), caption), MinHeight = 29, Padding = new Thickness(10, 5), Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand) };
-        AutomationProperties.SetName(button, label);
+        AutomationProperties.SetName(button, label); Motion.ButtonFeedback(button);
         if (primary) button.Classes.Add("primary");
         button.Click += (_, _) => action(); return button;
     }

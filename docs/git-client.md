@@ -16,13 +16,15 @@ Magic resolve can analyze the current hand-edited result. It preserves text outs
 
 ## Repository
 
-The History tab shows a graph derived from commit parent IDs. Search filters loaded subjects, authors, hashes, and references. Graph lines hide during filtering to avoid implying connections between hidden commits. All branches includes local branches, fetched remote references, tags, and HEAD. The default batch is 200 commits; Load more increases the window to 2,000. Clicking a commit opens details and history actions.
+The History tab shows a graph derived from commit parent IDs. Search filters loaded subjects, authors, hashes, and references. Graph lines hide during filtering to avoid implying connections between hidden commits. All branches includes local branches, fetched remote references, tags, and HEAD. The default batch is 200 commits; Load more increases the window to 2,000. Selecting a commit opens an embedded file-by-file diff below the graph. The workspace uses its full width, with resizable graph/diff and file-list dividers. Select a changed file to compare its committed content against the parent in side-by-side or unified view, with line numbers, syntax and word highlighting, search, whitespace filtering, context folding, and change navigation. Merge commits offer a parent selector; initial commits compare against an empty tree. These comparisons pin commit IDs and exclude working-tree edits. Binary or unsupported files show an explicit explanation. Commit actions retains the full message, raw patch, tag, cherry-pick, revert, reset, and amend commands; Repository actions contains repository-wide controls.
 
 Branches, Tags, and Remotes expose creation, inspection, update, and deletion. Branch deletion defaults to merged branches only; Git protects checked-out branches, including those in other worktrees. Tag updates use an expected object ID so concurrent changes are rejected. Local tag/branch deletion does not delete remote references. Remote removal removes its local tracking configuration, not the hosted repository. Pushes retain explicit destination review and never force-push.
 
 Stashes preserve both staged and unstaged work. Apply and Pop require a clean checkout; ignored files are not included. Pop only drops a stash after successful application. Applying a conflicting stash leaves the stash available and exposes conflicts in Resolve. Unlike merge/rebase, Git stash application has no Continue/Abort operation; resolve and commit the restored work normally.
 
 Worktrees create separate working folders at a selected revision, detached or on a new branch. Removing a worktree delegates to Git without force; dirty, untracked, locked, current, and main worktrees are protected by the application or Git.
+
+History rows are selectable across their full width. Branch colors stay attached to their lanes as columns shift, curved joins show ancestry, and merge nodes and branch/tag badges distinguish references. Up/Down and Home/End move through visible commits. Short fades provide hover, selection, and diff-loading feedback; **Settings → Appearance → Reduce motion** turns these transitions off immediately and persists across restarts. See [the immersion review](ux-immersion.md) for the design and validation scope.
 
 ## History changes and recovery
 

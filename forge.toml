@@ -1,6 +1,6 @@
 [app]
 name = "Gitland"
-version = "0.14.1"
+version = "0.14.2"
 id = "com.fezcode.gitland"
 icon = "src/Gitland.App/Assets/gitland.ico"
 

@@ -22,6 +22,10 @@ public sealed class SettingsTests {
             Assert.Equal(220, (legacy with { SidebarWidth = 100 }).Normalize().SidebarWidth);
             Assert.Equal(0, (legacy with { SidebarWidth = double.NaN }).Normalize().SidebarWidth);
             Assert.Equal(0, legacy.SidebarWidth);
+            store.Save(legacy with { ReduceMotion = true });
+            Assert.True(store.Load().ReduceMotion);
+            Assert.NotEqual(legacy, store.Load());
+            Assert.Equal(legacy with { ReduceMotion = true }, store.Load());
             Assert.Single(Directory.GetFiles(directory));
         } finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     }

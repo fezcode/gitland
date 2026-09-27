@@ -17,4 +17,14 @@ public class HistoryGraphTests {
         Assert.All(graph, row => Assert.Equal(0, row.Column)); Assert.All(graph, row => Assert.Equal(1, row.Width));
         Assert.True(graph[0].NewLane); Assert.False(graph[1].NewLane); Assert.Empty(graph[2].Edges);
     }
+    [Fact] public void LaneIdentitySurvivesColumnChangesAndMatchesEveryConnector() {
+        var graph = HistoryGraph.Layout([Commit("merge", "left right third"), Commit("left", "base"), Commit("right", "base"), Commit("third", "base"), Commit("base", "")]);
+        Assert.Equal(3, graph[0].EdgeLanes.Distinct().Count());
+        for (int i = 0; i < graph.Count - 1; i++)
+            for (int e = 0; e < graph[i].Edges.Count; e++)
+                Assert.Equal(graph[i].EdgeLanes[e], graph[i + 1].IncomingLanes[graph[i].Edges[e].To]);
+        Assert.Equal(graph[0].Lane, graph[^1].Lane);
+        Assert.NotEqual(graph[1].Lane, graph[2].Lane);
+        Assert.NotEqual(graph[2].Lane, graph[3].Lane);
+    }
 }

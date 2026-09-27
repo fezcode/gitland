@@ -161,6 +161,7 @@ public sealed class RecentRepositoryTests {
             baseline with { SidebarWidth = 300 },
             baseline with { RecentRepositories = new List<string> { @"C:\a" } },
             baseline with { WorkspaceRoot = @"D:\Workhammer" },
+            baseline with { ReduceMotion = true },
         };
         // One entry per settable property; if the record grows, this count fails first.
         Assert.Equal(typeof(UserSettings).GetProperties().Count(p => p.CanWrite), changed.Length);

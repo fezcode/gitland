@@ -13,7 +13,7 @@ public sealed partial class MainWindow {
         var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*") };
         var tabs = new WrapPanel { Margin = new Thickness(12, 8) };
         foreach (string name in new[] { "History", "Branches", "Tags", "Remotes", "Stashes", "Worktrees", "Rewrite", "Advanced", "Recovery" }) {
-            var tab = Button(name, () => { _repositoryTab = name; RenderManagement(); RenderNavigation(); }); tab.Classes.Add("selection-item"); tab.Background = name == _repositoryTab ? SelectedSurface : Brushes.Transparent; tab.BorderThickness = new Thickness(0); tabs.Children.Add(tab);
+            var tab = Button(name, () => { _repositoryTab = name; RenderManagement(); RenderNavigation(); if (name == "History" && _repo != null && SelectedHistoryCommit is { } commit) Run(() => InspectCommit(commit)); }); tab.Classes.Add("selection-item"); tab.Background = name == _repositoryTab ? SelectedSurface : Brushes.Transparent; tab.BorderThickness = new Thickness(0); tabs.Children.Add(tab);
         }
         Add(root, tabs, 0);
         if (_tools?.Operation is { Length: > 0 } operation) {
@@ -185,14 +185,22 @@ public sealed partial class MainWindow {
         await window.ShowDialog(this);
     }
     async Task InspectCommit(GitCommit commit) {
-        string details = await _repo!.CommitDetailsAsync(commit.Hash);
-        var window = new Window { Title = "Commit " + commit.ShortHash, Width = 900, Height = 700, Background = Ground, Foreground = Ink, FontFamily = Sans, WindowStartupLocation = WindowStartupLocation.CenterOwner };
-        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*"), Margin = new Thickness(18) };
-        Func<Task>? followUp = null;
-        Button next(string label, Func<Task> run) => Button(label, () => { followUp = run; window.Close(); });
-        Add(root, WrapActions(next("View patch", async () => await ShowText("Patch · " + commit.ShortHash, await _repo.CommitPatchAsync(commit.Hash))), next("Cherry-pick", () => HistoryDialog("cherry-pick", commit.Hash)), next("Revert", () => HistoryDialog("revert", commit.Hash)), next("Tag commit", () => TagDialog(commit.Hash)), next("Reset to this commit…", () => ResetDialog(commit.Hash)), next("Amend HEAD message…", AmendMessageDialog)), 0);
-        Add(root, new TextBox { Text = details, IsReadOnly = true, AcceptsReturn = true, FontFamily = Mono, FontSize = 13 }, 1); window.Content = root; await window.ShowDialog(this);
-        if (followUp != null) await followUp();
+        if (_historyReview == null || _repo == null) return;
+        _historySelectedHash = commit.Hash; _historySelectedRoot = _repo.Root;
+        foreach (var (hash, button) in _historyButtons) { button.Classes.Set("selected", hash == commit.Hash); button.Background = hash == commit.Hash ? SelectedSurface : Brushes.Transparent; if (_historyTracks.TryGetValue(hash, out var track)) track.Emphasis = hash == commit.Hash ? 1 : 0; }
+        await _historyReview.LoadAsync(commit);
+    }
+    Control HistoryCommitActions(GitCommit commit) {
+        var button = Button("Commit actions", () => { }, "down");
+        MenuItem Item(string name, Func<Task> action) { var item = new MenuItem { Header = name }; item.Click += (_, _) => Run(action); return item; }
+        var amend = Item("Amend HEAD message…", AmendMessageDialog); amend.IsEnabled = commit.Hash == _management?.Head;
+        var menu = new ContextMenu { ItemsSource = new Control[] {
+            Item("Full commit message", async () => await ShowText("Commit · " + commit.ShortHash, await _repo!.CommitMessageAsync(commit.Hash))),
+            Item("View raw patch", async () => await ShowText("Patch · " + commit.ShortHash, await _repo!.CommitPatchAsync(commit.Hash))),
+            new Separator(), Item("Cherry-pick", () => HistoryDialog("cherry-pick", commit.Hash)), Item("Revert", () => HistoryDialog("revert", commit.Hash)),
+            Item("Tag commit", () => TagDialog(commit.Hash)), Item("Reset to this commit…", () => ResetDialog(commit.Hash)), amend
+        } };
+        button.Click += (_, _) => menu.Open(button); return button;
     }
     async Task ResetDialog(string revision) {
         if (_management?.Head is not { } head) return;

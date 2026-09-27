@@ -15,12 +15,15 @@ public sealed partial class MainWindow {
     TextBlock? _integrationStatus, _settingsStatus;
     void ApplyPreferences(bool resetDiffLayout = false) {
         var preferences = GitlandApplication.Preferences;
+        Motion.Refresh();
         Palette.Apply(preferences.Theme);
         Palette.ApplyFonts(preferences.InterfaceFont, preferences.CodeFont);
         FontFamily = Sans;
         foreach (var window in OwnedWindows) window.FontFamily = Sans;
         if (Application.Current != null) Application.Current.RequestedThemeVariant = Current.Light ? ThemeVariant.Light : ThemeVariant.Dark;
+        foreach (var graph in this.GetVisualDescendants().OfType<HistoryGraphCell>()) graph.InvalidateVisual();
         _canvas.CodeSize = preferences.CodeSize; _canvas.RefreshAppearance();
+        foreach (var canvas in this.GetVisualDescendants().OfType<DiffCanvas>()) { canvas.CodeSize = preferences.CodeSize; canvas.RefreshAppearance(); }
         foreach (var canvas in _threeCanvases) { canvas.CodeSize = preferences.CodeSize; canvas.RefreshAppearance(); }
         foreach (var editor in this.GetVisualDescendants().Concat(OwnedWindows.SelectMany(w => w.GetVisualDescendants())).OfType<MergeEditor>()) { editor.FontFamily = Mono; editor.FontSize = preferences.CodeSize; editor.RefreshAppearance(); }
         if (resetDiffLayout) {
@@ -76,6 +79,9 @@ public sealed partial class MainWindow {
                     tile.Content = Col(preview, label); ToolTip.SetTip(tile, theme.Description); Add(grid, tile, i / 2, i % 2);
                 }
                 page.Children.Add(grid); page.Children.Add(Paragraph("Themes apply immediately. Your open files and merge edits stay in place.", Faint));
+                var reduceMotion = new CheckBox { Content = "Reduce motion", IsChecked = GitlandApplication.Preferences.ReduceMotion };
+                reduceMotion.IsCheckedChanged += (_, _) => SavePreferences(GitlandApplication.Preferences with { ReduceMotion = reduceMotion.IsChecked == true });
+                page.Children.Add(Col(reduceMotion, Paragraph("Turn off hover fades, graph emphasis transitions, and content fades. Changes appear immediately.", Faint)));
             } else if (selected == "fonts") {
                 page.Children.Add(Col(Text("Fonts", 17, strong: true), Paragraph("Choose interface and source fonts separately.")));
                 ComboBox Picker(string name, IReadOnlyList<FontChoice> choices, string current, Action<FontChoice> change) {

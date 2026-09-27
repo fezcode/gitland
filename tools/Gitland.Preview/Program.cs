@@ -46,10 +46,14 @@ brand.Measure(new Size(256, 256)); brand.Arrange(new Rect(0, 0, 256, 256));
 using (var logo = new RenderTargetBitmap(new PixelSize(256, 256), new Vector(96, 96))) { logo.Render(brand); logo.Save(Path.Combine(output, "logo.png")); }
 var window = new MainWindow(fixture: Demo.Fixture) { Width = 1440, Height = 920 };
 window.Show(); Pump();
+if (args.Contains("--history-review")) { Finish(ExerciseHistoryReview()); window.Close(); return; }
 Finish(window.PreviewDiff()); Save("diff.png");
+ExerciseNavigationHover();
+if (args.Contains("--navigation-hover")) { window.Close(); return; }
 Check(Buttons("Merge").Count() == 1 && !Buttons("Three-way comparison").Any() && !Buttons("Resolve conflicts").Any(), "A single Merge navigation entry replaces the two separate workspaces.");
 
 var canvas = window.GetVisualDescendants().OfType<DiffCanvas>().Single();
+if (args.Contains("--repository-review")) { Finish(ExerciseRepository()); window.Close(); return; }
 var additions = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "DiffAdditions");
 var deletions = window.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "DiffDeletions");
 Check(additions.Text == "+11" && deletions.Text == "−2" && ReferenceEquals(additions.Foreground, Palette.Green) && ReferenceEquals(deletions.Foreground, Palette.Red), "Diff totals give additions and deletions their own semantic colors.");
@@ -329,6 +333,112 @@ window.Close(); Console.WriteLine(output);
 Button[] Buttons(string name) => window.GetVisualDescendants().OfType<Button>().Where(b => AutomationProperties.GetName(b) == name).ToArray();
 void Click(string name) { Buttons(name).First().RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump(); }
 void Check(bool condition, string message) { if (!condition) throw new Exception(message); Console.WriteLine("PASS " + message); }
+void ExerciseNavigationHover() {
+    var tabs = window.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("workspace-tab")).ToArray();
+    ContentPresenter Surface(Button tab) => tab.GetVisualDescendants().OfType<ContentPresenter>().Single(p => p.Name == "PART_ContentPresenter");
+    Color Fill(Button tab) => (Surface(tab).Background as ISolidColorBrush)?.Color ?? Colors.Transparent;
+    void Hover(Button tab) => window.MouseMove(tab.TranslatePoint(new Point(tab.Bounds.Width / 2, tab.Bounds.Height / 2), window)!.Value);
+    var active = tabs.Single(b => b.Classes.Contains("selected"));
+    var others = tabs.Where(b => b != active).ToArray();
+    Hover(others[0]); Pump();
+    Hover(others[1]); Dispatcher.UIThread.RunJobs();
+    Check(Fill(others[0]).A == 0, "Leaving a sidebar tab clears its hover immediately, without a second fading highlight.");
+    Check(Fill(others[1]) == Palette.HoverFill.Color, "The newly hovered sidebar tab has one immediate hover surface.");
+    Check(Fill(active) == Palette.SelectedSurface.Color, "Sidebar hover preserves the selected tab's surface.");
+    Hover(active); Dispatcher.UIThread.RunJobs();
+    Check(Fill(active) == Palette.SelectedSurface.Color, "Hovering the selected sidebar tab does not add another highlight.");
+    window.MouseMove(new Point(500, 70)); Dispatcher.UIThread.RunJobs();
+    Check(others.All(b => Fill(b).A == 0), "Moving out of the sidebar leaves no stale hover highlights.");
+    Save("sidebar-hover.png");
+}
+async Task ExerciseHistoryReview() {
+    string root = Path.Combine(output, "history-review-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(root); var repo = new GitRepository(root); await repo.Git("init", "-b", "main");
+    await repo.Git("config", "user.name", "Gitland UI Test"); await repo.Git("config", "user.email", "test@example.invalid"); await repo.Git("config", "core.autocrlf", "false");
+    string source = "export function compare(options) {\n" + string.Join('\n', Enumerable.Range(1, 32).Select(i => "  const value" + i + " = " + i + ";")) + "\n}\n";
+    await File.WriteAllTextAsync(Path.Combine(root, "compare.ts"), source);
+    await repo.Git("add", "."); await repo.Git("commit", "-m", "Introduce the comparison engine");
+    string initial = await repo.ResolveRef("HEAD");
+    await File.WriteAllTextAsync(Path.Combine(root, "compare.ts"), source.Replace("const value2 = 2;", "const value2 = options.context;").Replace("const value28 = 28;", "const value28 = options.detectRenames;"));
+    await File.WriteAllTextAsync(Path.Combine(root, "README.md"), "# Comparison engine\n"); await repo.Git("add", "."); await repo.Git("commit", "-m", "Use comparison options and document the engine");
+    await File.WriteAllTextAsync(Path.Combine(root, "compare.ts"), "UNCOMMITTED CONTENT\n");
+    string index = await repo.Git("write-tree"), status = await repo.Git("status", "--porcelain=v1");
+    await window.OpenRepository(root); Click("Repository"); await WaitForAction();
+    Check(window.OwnedWindows.Count == 0 && window.GetVisualDescendants().OfType<CommitDiffView>().Count() == 1, "Graph selection opens an embedded diff without a text dialog.");
+    Click("Review committed file compare.ts");
+    async Task WaitUntil(Func<bool> ready) { var deadline = DateTime.UtcNow.AddSeconds(20); while (!ready() && DateTime.UtcNow < deadline) { await Task.Delay(20); Pump(); } Check(ready(), "Commit diff loading completes."); }
+    DiffCanvas HistoryCanvas() => window.GetVisualDescendants().OfType<DiffCanvas>().Single(c => c.Name == "HistoryDiff");
+    await WaitUntil(() => window.GetVisualDescendants().OfType<DiffCanvas>().Any(c => c.Name == "HistoryDiff" && c.Rows.Any(r => (r.Right ?? "").Contains("options.context"))));
+    var diff = HistoryCanvas();
+    Check(!diff.Unified && diff.Rows.Any(r => r.Kind == ChangeKind.Modified) && diff.Rows.Any(r => (r.Left ?? "").Contains("value2 = 2")), "Graph review shows aligned parent and commit sources with colored changes.");
+    Check(!diff.Rows.Any(r => (r.Right ?? "").Contains("UNCOMMITTED")), "History review excludes current working-tree edits.");
+    Save("history-diff.png");
+    window.KeyPressQwerty(PhysicalKey.F, RawInputModifiers.Control); window.KeyReleaseQwerty(PhysicalKey.F, RawInputModifiers.Control); Pump();
+    Check(window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Watermark == "Find in commit diff").IsFocused, "Ctrl+F focuses the graph's commit diff search.");
+
+    Click("Commit diff unified"); Check(diff.Unified && diff.Rows.Any(r => r.Kind == ChangeKind.Added) && diff.Rows.Any(r => r.Kind == ChangeKind.Removed), "Unified history diff distinguishes additions and deletions.");
+    Click("Next commit change"); Check(diff.ActiveRow > 2, "History diff navigates to the next change region.");
+    Click("Commit diff side by side");
+    window.Width = 980; window.Height = 640; Pump(); Save("history-diff-compact.png");
+    Check(diff.Bounds.Width >= 260 && diff.ViewHeight >= 90, "Minimum window retains a readable history diff and file navigator.");
+    window.Width = 1440; window.Height = 920; Pump();
+    string firstShort = (await repo.Git("rev-parse", "--short", initial)).Trim();
+    Click("Inspect commit " + firstShort); await WaitForAction();
+    Check(HistoryCanvas().Rows.Any(r => r.Kind == ChangeKind.Added) && !HistoryCanvas().Rows.Any(r => r.LeftNumber != null), "Selecting the first graph commit compares it with the empty tree.");
+    Check(index == await repo.Git("write-tree") && status == await repo.Git("status", "--porcelain=v1"), "Graph review preserves the index and working tree.");
+    var fullRow = Buttons("Inspect commit " + firstShort).Single();
+    var graphArea = window.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "HistoryWorkspace");
+    Check(fullRow.Bounds.Width >= graphArea.Bounds.Width - 4 && fullRow.CornerRadius.TopLeft == 0, "Commit selection spans the complete row without a rounded box.");
+    var rowPoint = fullRow.TranslatePoint(new Point(fullRow.Bounds.Width - 105, 25), window)!.Value;
+    window.MouseDown(rowPoint, MouseButton.Left); window.MouseUp(rowPoint, MouseButton.Left); await WaitForAction();
+    Check(fullRow.Classes.Contains("selected"), "Clicking the date side selects the entire commit row.");
+    fullRow.Focus(); window.KeyPressQwerty(PhysicalKey.ArrowUp, RawInputModifiers.None); window.KeyReleaseQwerty(PhysicalKey.ArrowUp, RawInputModifiers.None); await WaitForAction();
+    Check(!fullRow.Classes.Contains("selected"), "Arrow keys move selection and load the next commit review.");
+    var twoRows = window.GetVisualDescendants().OfType<Button>().Where(b => b.Classes.Contains("history-row")).ToArray();
+    twoRows[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); twoRows[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); await WaitForAction();
+    Check(twoRows[1].Classes.Contains("selected") && HistoryCanvas().Rows.All(r => r.LeftNumber == null), "Rapid commit selection keeps the newest requested result.");
+    Click("Settings"); Pump(); var motionSettings = window.OwnedWindows.Single();
+    var reduceMotion = motionSettings.GetVisualDescendants().OfType<CheckBox>().Single(c => (string?)c.Content == "Reduce motion");
+    reduceMotion.IsChecked = true; Pump();
+    Check(new SettingsStore(settingsPath).Load().ReduceMotion && window.GetVisualDescendants().OfType<HistoryGraphCell>().All(g => g.Transitions == null), "Reduced motion persists and removes live graph transitions.");
+    reduceMotion.IsChecked = false; Pump();
+    motionSettings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Done").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump();
+    await repo.Git("restore", "--", "compare.ts");
+    await repo.Git("checkout", "-b", "feature/word-diff");
+    await File.WriteAllTextAsync(Path.Combine(root, "tokens.ts"), "export const colors = { added: 'green', removed: 'red' };\n");
+    await repo.Git("add", "."); await repo.Git("commit", "-m", "Give added and removed words their own colors");
+    await File.AppendAllTextAsync(Path.Combine(root, "tokens.ts"), "export const contextLines = 4;\n");
+    await repo.Git("add", "."); await repo.Git("commit", "-m", "Keep nearby source lines in view");
+    await repo.Git("checkout", "main");
+    await File.WriteAllTextAsync(Path.Combine(root, "preferences.json"), "{ \"theme\": \"xcode-dark\" }\n");
+    await repo.Git("add", "."); await repo.Git("commit", "-m", "Remember review preferences between sessions");
+    await repo.Git("checkout", "-b", "fix/encoding");
+    await File.WriteAllTextAsync(Path.Combine(root, "encoding.ts"), "export const encoding = 'utf-8';\n");
+    await repo.Git("add", "."); await repo.Git("commit", "-m", "Preserve file encoding when saving a merge");
+    await repo.Git("checkout", "main");
+    await repo.Git("merge", "--no-ff", "feature/word-diff", "-m", "Bring word-level highlights into the review workspace");
+    await repo.Git("tag", "v0.14.1");
+    await repo.Git("merge", "--no-ff", "fix/encoding", "-m", "Merge encoding safeguards");
+    Click("Refresh · F5"); await WaitForAction();
+    string tipShort = (await repo.Git("rev-parse", "--short", "HEAD")).Trim(); Click("Inspect commit " + tipShort); await WaitForAction();
+    var tracks = window.GetVisualDescendants().OfType<HistoryGraphCell>().ToArray();
+    Check(tracks.Any(g => g.IsMerge) && tracks.Select(g => g.Lane).Distinct().Count() >= 3, "Real branch history renders distinct persistent lanes and merge nodes.");
+    Check(HistoryCanvas().Bounds.Y < 1, "Short commit diffs start at the top of their viewport.");
+    var mergeParent = window.GetVisualDescendants().OfType<ComboBox>().Single(c => c.Name == "CommitParent");
+    Check(mergeParent.IsEnabled && mergeParent.ItemCount == 2, "Merge review offers both parents.");
+    mergeParent.SelectedIndex = 1; await WaitForAction();
+    Check(Buttons("Review committed file tokens.ts").Length == 1, "Changing the merge parent loads that parent's changed files.");
+    mergeParent.SelectedIndex = 0; await WaitForAction();
+    window.MouseMove(new Point(75, 70)); Pump();
+    Save("history-immersive.png");
+    window.Width = 980; window.Height = 640; Pump(); Save("history-immersive-compact.png");
+    Check(HistoryCanvas().ViewHeight >= 90, "The richer history keeps the compact diff readable.");
+    window.Width = 1440; window.Height = 920; Pump();
+    Click("Settings"); Pump(); var paperSettings = window.OwnedWindows.Single();
+    paperSettings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Use Paper theme").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump();
+    paperSettings.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Done").RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump(); Save("history-immersive-paper.png");
+
+}
 async Task ExerciseRepository() {
     var root = Path.Combine(output, "ui-fixture-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(root);
     var repo = new GitRepository(root);
@@ -453,7 +563,7 @@ async Task ExerciseRepository() {
     Check((await repo.ReadManagementAsync()).Commits[0].Subject == "Resolve incoming merge", "Native commit action commits the reviewed staged result.");
     Click("Repository"); await WaitForAction();
     Check(window.GetVisualDescendants().OfType<HistoryGraphCell>().Count() == (await repo.ReadManagementAsync()).Commits.Count, "History renders a graph cell for each actual commit.");
-    var historySearch = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Watermark == "Filter history by message, author, hash, or reference");
+    var historySearch = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "HistorySearch");
     historySearch.Text = "Resolve incoming merge"; Pump(); Check(window.GetVisualDescendants().OfType<HistoryGraphCell>().All(c => !c.IsVisible), "Filtered history hides graph connections across omitted commits.");
     historySearch.Text = ""; Pump(); Save("history-real.png");
     Click("Tag commit"); Pump();

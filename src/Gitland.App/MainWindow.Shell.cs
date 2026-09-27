@@ -15,6 +15,7 @@ public sealed partial class MainWindow {
     readonly TextBlock _workspaceHint = Text("No repository", 11, Faint);
     readonly Grid _fileScopes = new() { ColumnDefinitions = new ColumnDefinitions("*,*,*"), ColumnSpacing = 2 };
     Grid? _shell, _titlebar;
+    Action? _updateRepositoryLayout;
     Border? _workspaceFrame;
     Button? _maximizeButton;
     WindowState _beforeFullscreen = WindowState.Normal;
@@ -90,12 +91,17 @@ public sealed partial class MainWindow {
             body.ColumnDefinitions[0].Width = new GridLength(compact ? 52 : 64);
             double maximum = Math.Clamp(Bounds.Width - (compact ? 52 : 64) - 5 - 520, 220, 600);
             body.ColumnDefinitions[1].MaxWidth = maximum;
-            body.ColumnDefinitions[1].Width = new GridLength(Math.Min(maximum, sidebarWidth > 0 ? sidebarWidth : compact ? 232 : 280));
+            bool showFiles = _mode != "repository";
+            sidebar.IsVisible = splitter.IsVisible = showFiles;
+            body.ColumnDefinitions[1].MinWidth = showFiles ? 220 : 0;
+            body.ColumnDefinitions[1].Width = new GridLength(showFiles ? Math.Min(maximum, sidebarWidth > 0 ? sidebarWidth : compact ? 232 : 280) : 0);
+            body.ColumnDefinitions[2].Width = new GridLength(showFiles ? 5 : 0);
             _workspaceFrame!.Margin = compact ? new Thickness(8, 0, 8, 8) : new Thickness(16, 0, 16, 16);
             UpdateCommitDensity();
             shortcuts.IsVisible = !compact; breadcrumb.IsVisible = Bounds.Width >= 1080;
         }
         splitter.DoubleTapped += (_, _) => { sidebarDragged = false; sidebarWidth = 0; SavePreferences(GitlandApplication.Preferences with { SidebarWidth = 0 }); Density(); };
+        _updateRepositoryLayout = Density;
         SizeChanged += (_, _) => Density(); Density();
         _workspace.SizeChanged += (_, _) => UpdatePageDensity();
         return _shell;
@@ -125,6 +131,7 @@ public sealed partial class MainWindow {
     void ToggleMaximize() => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
     static bool IsButtonSource(object? source) => source is Visual visual && (visual is Button || visual.GetVisualAncestors().Any(v => v is Button));
     void RenderNavigation() {
+        _updateRepositoryLayout?.Invoke();
         _navigation.Children.Clear();
         foreach (var (id, label, icon) in new[] { ("workspace", "Workspace", "layers"), ("changes", "Working changes", "diff"), ("compare", "Compare revisions", "compare"), ("merge", "Merge", "merge"), ("repository", "Repository", "branch"), ("tags", "Manage tags", "tag"), ("github", "GitHub & releases", "cloud") }) {
             var active = id == "merge" ? _mode is "merge" or "threeway" : id == "tags" ? _mode == "repository" && _repositoryTab == "Tags" : id == "repository" ? _mode == "repository" && _repositoryTab != "Tags" : id == _mode;

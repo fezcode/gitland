@@ -41,7 +41,10 @@ public sealed partial class MainWindow {
             _branch.Text = _state.Branch;
         } else _management = _fixture?.Management ?? new([], [], [], [], "", null, false);
         RenderNavigation(); RenderContext(); RenderFiles();
-        if (_mode == "github") RenderGitHub(); else if (_mode == "repository") RenderManagement(); else await Refresh();
+        if (_mode == "github") RenderGitHub(); else if (_mode == "repository") {
+            RenderManagement();
+            if (_repositoryTab == "History" && _repo != null && SelectedHistoryCommit is { } commit) await InspectCommit(commit);
+        } else await Refresh();
     }
     async Task PushBranch(string remote, bool force = false) {
         if (_repo == null || _management?.Head == null) return;

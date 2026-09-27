@@ -4,47 +4,81 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Input;
 using Gitland.Core;
 using static Gitland.App.Palette;
 
 namespace Gitland.App;
 
 public sealed partial class MainWindow {
+    CommitDiffView? _historyReview;
+    string? _historySelectedHash, _historySelectedRoot;
+    GitCommit? SelectedHistoryCommit => _management?.Commits.FirstOrDefault(c => _historySelectedRoot == _repo?.Root && c.Hash == _historySelectedHash) ?? _management?.Commits.FirstOrDefault();
+    readonly Dictionary<string, Button> _historyButtons = new();
+    readonly Dictionary<string, HistoryGraphCell> _historyTracks = new();
     void RenderManagement() {
         if (_management == null) return;
         if (_repositoryTab != "History") { RenderRepositoryTools(); return; }
         var model = _management;
-        var page = new Grid { ColumnDefinitions = new ColumnDefinitions("*,310") };
-        var history = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*") };
-        var historyHeader = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(20, 20, 20, 24) };
-        historyHeader.Children.Add(Col(Text("Commit history", 21, strong: true), Text(_state.Branch, 12, Muted)));
-        var allBranches = new CheckBox { Content = "All branches", IsChecked = _historyAll };
+        var page = new Grid { Name = "HistoryWorkspace", RowDefinitions = new RowDefinitions(".8*,7,1.4*") };
+        page.RowDefinitions[0].MinHeight = 120; page.RowDefinitions[2].MinHeight = 180;
+        _historyButtons.Clear(); _historyTracks.Clear();
+        var history = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*") };
+        var search = new TextBox { Name = "HistorySearch", Watermark = "Search commits, authors, or refs", MinWidth = 100, FontSize = 11 };
+        var allBranches = new CheckBox { Content = "All branches", IsChecked = _historyAll, FontSize = 11 };
         allBranches.IsCheckedChanged += (_, _) => Run(async () => { _historyAll = allBranches.IsChecked == true; await LoadManagement(); });
-        Add(historyHeader, Row(allBranches, Badge(Short(model.Head))), 0, 1); Add(history, historyHeader, 0);
-        var columns = new Grid { ColumnDefinitions = new ColumnDefinitions("*,120,30"), Margin = new Thickness(49, 0, 18, 10) };
-        columns.Children.Add(Text("Commit", 11, Faint)); Add(columns, Text("Committed", 11, Faint), 0, 1); Add(history, columns, 1);
-        var search = new TextBox { Watermark = "Filter history by message, author, hash, or reference", Margin = new Thickness(18, 0, 18, 12) };
-        Add(history, search, 2);
+        var repositoryActions = Button("Repository actions", () => { }, "down");
+        var historyHeader = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 12, Margin = new Thickness(12, 8) };
+        historyHeader.Children.Add(search); Add(historyHeader, Row(allBranches, repositoryActions), 0, 1); Add(history, historyHeader, 0);
+        var columnTitles = new Grid { ColumnDefinitions = new ColumnDefinitions("*,140,84,34"), ColumnSpacing = 12, Margin = new Thickness(24, 2, 18, 8) };
+        var historyCount = Text($"{model.Commits.Count} commits", 10, Faint); columnTitles.Children.Add(historyCount);
+        Add(columnTitles, Text("AUTHOR", 9, Faint), 0, 1); Add(columnTitles, Text("DATE", 9, Faint), 0, 2); Add(history, columnTitles, 1);
         var entries = new StackPanel { Spacing = 0 };
         var historyRows = new List<(Control Row, string Text)>();
         var graph = HistoryGraph.Layout(model.Commits); int graphIndex = 0;
-        int graphWidth = Math.Max(20, graph.Select(r => r.Width).DefaultIfEmpty(1).Max() * 14 + 10);
+        int graphWidth = Math.Max(20, graph.Select(r => r.Width).DefaultIfEmpty(1).Max() * HistoryGraphCell.LaneSpacing + 12);
         var graphCells = new List<HistoryGraphCell>();
         foreach (var entry in model.Commits) {
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions($"{graphWidth},*,120,30"), ColumnSpacing = 10, Margin = new Thickness(18, 0) };
-            var track = new HistoryGraphCell(graph[graphIndex++]); graphCells.Add(track); row.Children.Add(track);
-            var labels = Col(Text(entry.Subject, 12), Row(Text(entry.ShortHash, 10, Faint), Text(entry.Author, 10, Faint))); labels.Spacing = 7;
-            if (entry.Decorations.Length > 0) labels.Children.Add(Text(entry.Decorations, 10, Muted));
-            var inspect = Button("Inspect commit " + entry.ShortHash, () => Run(() => InspectCommit(entry))); inspect.Content = labels; inspect.Classes.Add("quiet"); inspect.HorizontalContentAlignment = HorizontalAlignment.Left; inspect.Padding = new Thickness(0, 14); inspect.IsEnabled = _repo != null; Add(row, inspect, 0, 1);
-            Add(row, Text(entry.Date[..Math.Min(10, entry.Date.Length)], 11, Faint), 0, 2);
-            var tag = IconButton("Tag commit", () => Run(() => TagDialog(entry.Hash)), "tag"); tag.IsEnabled = _repo != null; Add(row, tag, 0, 3);
-            var item = new Border { Child = row, BorderBrush = Hairline, BorderThickness = new Thickness(0, 0, 0, 1) };
+            var graphRow = graph[graphIndex++];
+            var track = new HistoryGraphCell(graphRow); graphCells.Add(track); _historyTracks[entry.Hash] = track;
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions($"{graphWidth},*,140,84,34"), ColumnSpacing = 12, Margin = new Thickness(18, 0) };
+            row.Children.Add(track);
+            var subject = Text(entry.Subject, 12, strong: true); subject.TextTrimming = TextTrimming.CharacterEllipsis;
+            var references = Row(Text(entry.ShortHash, 10, Faint)); references.Spacing = 7; references.ClipToBounds = true;
+            foreach (string reference in entry.Decorations.Split(", ", StringSplitOptions.RemoveEmptyEntries).Take(3)) {
+                bool tag = reference.StartsWith("tag: "); string caption = reference.Replace("HEAD -> ", "HEAD · ").Replace("HEAD → ", "HEAD · ").Replace("tag: ", "");
+                var badge = new Border { Child = Row(Icon(tag ? "tag" : "branch", tag ? Amber : HistoryGraphCell.LaneBrush(graphRow.Lane), 10), Text(caption, 10, tag ? Amber : HistoryGraphCell.LaneBrush(graphRow.Lane))), Background = Raised, CornerRadius = new CornerRadius(3), Padding = new Thickness(5, 2), MaxWidth = 220, ClipToBounds = true };
+                ToolTip.SetTip(badge, reference); references.Children.Add(badge);
+            }
+            if (track.IsMerge) references.Children.Add(Text("merge", 10, Faint));
+            var labels = Col(subject, references); labels.Spacing = 4; labels.ClipToBounds = true; labels.VerticalAlignment = VerticalAlignment.Center; Add(row, labels, 0, 1);
+            var author = Text(entry.Author, 11, Muted); author.TextTrimming = TextTrimming.CharacterEllipsis; ToolTip.SetTip(author, entry.Author); Add(row, author, 0, 2);
+            Add(row, Text(entry.Date[..Math.Min(10, entry.Date.Length)], 10, Faint), 0, 3);
+            var inspect = Button("Inspect commit " + entry.ShortHash, async () => await InspectCommit(entry)); inspect.Content = row;
+            inspect.Classes.Add("selection-item"); inspect.Classes.Add("history-row"); _historyButtons[entry.Hash] = inspect;
+            inspect.Background = entry.Hash == _historySelectedHash ? SelectedSurface : Brushes.Transparent;
+            inspect.BorderThickness = new Thickness(0); inspect.CornerRadius = new CornerRadius(0); inspect.Padding = new Thickness(0);
+            inspect.HorizontalAlignment = HorizontalAlignment.Stretch; inspect.HorizontalContentAlignment = HorizontalAlignment.Stretch; inspect.VerticalContentAlignment = VerticalAlignment.Stretch; inspect.Height = 54; inspect.IsEnabled = _repo != null;
+            ToolTip.SetTip(inspect, entry.Subject + "\n" + entry.Hash);
+            inspect.PointerEntered += (_, _) => { if (entry.Hash != _historySelectedHash) track.Emphasis = .45; };
+            inspect.PointerExited += (_, _) => track.Emphasis = entry.Hash == _historySelectedHash ? 1 : 0;
+            var item = new Grid { Height = 54 }; item.Children.Add(inspect);
+            var tagButton = IconButton("Tag commit", () => Run(() => TagDialog(entry.Hash)), "tag"); tagButton.IsEnabled = _repo != null; tagButton.HorizontalAlignment = HorizontalAlignment.Right; tagButton.Margin = new Thickness(0, 0, 18, 0); tagButton.Opacity = .55; item.Children.Add(tagButton);
+            item.PointerEntered += (_, _) => tagButton.Opacity = 1; item.PointerExited += (_, _) => tagButton.Opacity = .55;
             entries.Children.Add(item); historyRows.Add((item, entry.Subject + " " + entry.Author + " " + entry.Hash + " " + entry.Decorations));
+
         }
         if (model.Commits.Count == 0) { var empty = Paragraph("No commits yet. Stage your changes and write a commit message to get started."); empty.Margin = new Thickness(20); entries.Children.Add(empty); }
         if (model.Commits.Count >= _historyLimit && _historyLimit < 2000) entries.Children.Add(RepoAction("Load more commits", async () => { _historyLimit += 200; await LoadManagement(); }));
-        search.TextChanged += (_, _) => { foreach (var item in historyRows) item.Row.IsVisible = item.Text.Contains(search.Text ?? "", StringComparison.OrdinalIgnoreCase); foreach (var cell in graphCells) cell.IsVisible = string.IsNullOrEmpty(search.Text); };
-        Add(history, new ScrollViewer { Content = entries }, 3); page.Children.Add(history);
+        search.TextChanged += (_, _) => { foreach (var item in historyRows) item.Row.IsVisible = item.Text.Contains(search.Text ?? "", StringComparison.OrdinalIgnoreCase); foreach (var cell in graphCells) cell.IsVisible = string.IsNullOrEmpty(search.Text); historyCount.Text = $"{historyRows.Count(r => r.Row.IsVisible)} of {model.Commits.Count} commits"; };
+        entries.KeyDown += async (_, e) => {
+            if (e.KeyModifiers != KeyModifiers.None || e.Key is not (Key.Up or Key.Down or Key.Home or Key.End)) return;
+            var visible = model.Commits.Where(c => _historyButtons[c.Hash].Parent is Control parent && parent.IsVisible).ToArray(); if (visible.Length == 0) return;
+            int current = Array.FindIndex(visible, c => c.Hash == _historySelectedHash);
+            int target = e.Key == Key.Home ? 0 : e.Key == Key.End ? visible.Length - 1 : Math.Clamp(current + (e.Key == Key.Down ? 1 : -1), 0, visible.Length - 1);
+            e.Handled = true; var commit = visible[target]; _historyButtons[commit.Hash].Focus(); _historyButtons[commit.Hash].BringIntoView(); await InspectCommit(commit);
+        };
+        Add(history, new ScrollViewer { Content = entries }, 2); page.Children.Add(history);
 
         var inspector = new StackPanel();
         var writeCommit = Button("Write a commit", () => Run(async () => { await SetMode("changes"); _commitSummary.Focus(); }), "check", true);
@@ -73,7 +107,15 @@ public sealed partial class MainWindow {
         if (model.Tags.Count == 0) tags.Children.Add(Paragraph("Use the tag button beside a commit to mark a version.", Faint));
         inspector.Children.Add(Section("Tags", tags));
         var inspectorBorder = new Border { BorderBrush = Hairline, BorderThickness = new Thickness(1, 0, 0, 0), Background = Bar, Child = new ScrollViewer { Content = inspector } };
-        Add(page, inspectorBorder, 0, 1); RepositoryPage(page);
+        var flyout = new Flyout { Content = inspectorBorder }; inspectorBorder.Width = 320; inspectorBorder.MaxHeight = 520;
+        repositoryActions.Click += (_, _) => flyout.ShowAt(repositoryActions);
+        // Keep the common commit action directly available without opening the repository menu.
+        var quickCommit = Button("Write a commit", () => Run(async () => { await SetMode("changes"); _commitSummary.Focus(); }), "plus");
+        ((StackPanel)historyHeader.Children[1]).Children.Add(quickCommit);
+        Add(page, new GridSplitter { ResizeDirection = GridResizeDirection.Rows, ResizeBehavior = GridResizeBehavior.PreviousAndNext, Background = Hairline, HorizontalAlignment = HorizontalAlignment.Stretch, Cursor = new Cursor(StandardCursorType.SizeNorthSouth) }, 1);
+        _historyReview = _repo == null ? null : new CommitDiffView(_repo, HistoryCommitActions);
+        Add(page, _historyReview is null ? new TextBlock { Text = "Select a commit in a repository to review its changes.", Foreground = Muted, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } : _historyReview, 2);
+        RepositoryPage(page);
     }
     void RenderGitHub() {
         var origin = _management?.Remotes.FirstOrDefault(r => r.Name == "origin"); string? full = GitHubRepository;

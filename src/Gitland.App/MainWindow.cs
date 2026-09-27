@@ -389,7 +389,7 @@ public sealed partial class MainWindow : Window {
         if (_busy) return;
         _ = RunCore(action);
     }
-    public bool IsWorking => _busy;
+    public bool IsWorking => _busy || (_mode == "repository" && _repositoryTab == "History" && _historyReview?.IsLoading == true);
     /// <summary>The repository currently open, or null on the welcome screen.</summary>
     public string? RepositoryRoot => _repo?.Root;
     async Task RunCore(Func<Task> action) {
@@ -404,9 +404,9 @@ public sealed partial class MainWindow : Window {
         else if (e.Key == Key.F11) { ToggleFullscreen(); e.Handled = true; }
         else if (e.Key == Key.Escape && WindowState == WindowState.FullScreen) { ToggleFullscreen(); e.Handled = true; }
         else if (e.Key == Key.O && e.KeyModifiers.HasFlag(KeyModifiers.Control)) { Run(PickRepository); e.Handled = true; }
-        else if (e.Key == Key.F && e.KeyModifiers.HasFlag(KeyModifiers.Control)) { var search = _mode == "threeway" ? _threeSearch : _codeSearch; search?.Focus(); search?.SelectAll(); e.Handled = true; }
+        else if (e.Key == Key.F && e.KeyModifiers.HasFlag(KeyModifiers.Control)) { if (_mode == "repository" && _repositoryTab == "History") _historyReview?.FocusSearch(); else { var search = _mode == "threeway" ? _threeSearch : _codeSearch; search?.Focus(); search?.SelectAll(); } e.Handled = true; }
         else if (e.Key == Key.F5) { Run(Refresh); e.Handled = true; }
-        else if (e.KeyModifiers.HasFlag(KeyModifiers.Alt) && e.Key is Key.Up or Key.Down) { if (_mode == "threeway") _threeNavigate?.Invoke(e.Key == Key.Down ? 1 : -1); else Jump(e.Key == Key.Down ? 1 : -1); e.Handled = true; }
+        else if (e.KeyModifiers.HasFlag(KeyModifiers.Alt) && e.Key is Key.Up or Key.Down) { if (_mode == "repository" && _repositoryTab == "History") _historyReview?.NavigateChange(e.Key == Key.Down ? 1 : -1); else if (_mode == "threeway") _threeNavigate?.Invoke(e.Key == Key.Down ? 1 : -1); else Jump(e.Key == Key.Down ? 1 : -1); e.Handled = true; }
     }
     async Task ShowMessage(string title, string message) { var dialog = MakeDialog(title, message); var button = Button("Close", () => dialog.Close(), primary: true); ((StackPanel)dialog.Content!).Children.Add(button); await dialog.ShowDialog(this); }
     Window MakeDialog(string title, string message) => new() { Title = title, Width = 540, SizeToContent = SizeToContent.Height, CanResize = false, Background = Raised, Foreground = Ink, FontFamily = Sans, WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = new StackPanel { Margin = new Thickness(24), Spacing = 18, Children = { Text(title, 20, strong: true), new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap, Foreground = Muted, FontSize = 14 } } } };
