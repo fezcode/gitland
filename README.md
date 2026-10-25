@@ -138,3 +138,7 @@ Interactive rebase runs your plan without opening an editor, which relies on the
 - `LICENSES`: bundled font licenses.
 
 [Design notes](docs/design.md) · [Git workflows](docs/git-client.md) · [Fonts](docs/fonts.md)
+
+## Application icon
+
+The approved transparent artwork is `src/Gitland.App/Assets/icon-master.png`. Run `python tools/make-icon.py` with Python and Pillow to regenerate the PNG sizes, Windows ICO and raster-backed SVG wrapper. Generated assets are committed; normal builds do not require Python.
