@@ -2,9 +2,10 @@ using System.Text.Json;
 
 namespace Gitland.Core;
 
-public sealed record UserSettings(string Theme = "xcode-dark", double CodeSize = 13, bool HoswlEnabled = false, bool DefaultUnified = false, bool SyncMergeScroll = true, string InterfaceFont = "geist", string CodeFont = "geist-mono", double SidebarWidth = 0, IReadOnlyList<string>? RecentRepositories = null, string? WorkspaceRoot = null, bool ReduceMotion = false) {
+public sealed record UserSettings(string Theme = "atelier", double CodeSize = 13, bool HoswlEnabled = false, bool DefaultUnified = false, bool SyncMergeScroll = true, string InterfaceFont = "geist", string CodeFont = "geist-mono", double SidebarWidth = 0, IReadOnlyList<string>? RecentRepositories = null, string? WorkspaceRoot = null, bool ReduceMotion = false, GlassAppearance? Appearance = null) {
     public UserSettings Normalize() => this with {
-        Theme = Theme is "xcode-dark" or "graphite" or "midnight" or "paper" ? Theme : "xcode-dark",
+        Theme = Theme is "atelier" or "xcode-dark" or "graphite" or "midnight" or "paper" ? Theme : "atelier",
+        Appearance = (Appearance ?? new()).Normalize(),
         CodeSize = double.IsFinite(CodeSize) ? Math.Clamp(CodeSize, 11, 18) : 13,
         InterfaceFont = InterfaceFont is "geist" or "inter" or "modern" or "geometric" or "windows" or "swiss" or "editorial" or "monospace" ? InterfaceFont : "geist",
         CodeFont = CodeFont is "geist-mono" or "cascadia-code" or "consolas" ? CodeFont : "geist-mono",
@@ -23,13 +24,13 @@ public sealed record UserSettings(string Theme = "xcode-dark", double CodeSize =
         && Theme == other.Theme && CodeSize.Equals(other.CodeSize) && HoswlEnabled == other.HoswlEnabled
         && DefaultUnified == other.DefaultUnified && SyncMergeScroll == other.SyncMergeScroll
         && InterfaceFont == other.InterfaceFont && CodeFont == other.CodeFont && SidebarWidth.Equals(other.SidebarWidth)
-        && WorkspaceRoot == other.WorkspaceRoot && ReduceMotion == other.ReduceMotion
+        && WorkspaceRoot == other.WorkspaceRoot && ReduceMotion == other.ReduceMotion && (Appearance ?? new()) == (other.Appearance ?? new())
         && (RecentRepositories ?? []).SequenceEqual(other.RecentRepositories ?? [], StringComparer.Ordinal);
 
     public override int GetHashCode() {
         var hash = new HashCode();
         hash.Add(Theme); hash.Add(CodeSize); hash.Add(HoswlEnabled); hash.Add(DefaultUnified);
-        hash.Add(SyncMergeScroll); hash.Add(InterfaceFont); hash.Add(CodeFont); hash.Add(SidebarWidth); hash.Add(WorkspaceRoot); hash.Add(ReduceMotion);
+        hash.Add(SyncMergeScroll); hash.Add(InterfaceFont); hash.Add(CodeFont); hash.Add(SidebarWidth); hash.Add(WorkspaceRoot); hash.Add(ReduceMotion); hash.Add(Appearance ?? new());
         foreach (string path in RecentRepositories ?? []) hash.Add(path, StringComparer.Ordinal);
         return hash.ToHashCode();
     }

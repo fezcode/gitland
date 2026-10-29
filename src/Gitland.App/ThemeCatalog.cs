@@ -16,6 +16,7 @@ public static partial class Palette {
     public static readonly SolidColorBrush AddedFill = Token("AddedFill"), RemovedFill = Token("RemovedFill"), AddedWord = Token("AddedWord"), RemovedWord = Token("RemovedWord"), SearchFill = Token("SearchFill");
     public static readonly SolidColorBrush OursFill = Token("OursFill"), TheirsFill = Token("TheirsFill"), BaseFill = Token("BaseFill"), MarkerFill = Token("MarkerFill"), OursInk = Token("OursInk"), TheirsInk = Token("TheirsInk"), StringInk = Token("StringInk"), KeywordInk = Token("KeywordInk");
     public static readonly WorkbenchTheme[] Themes = [
+        new("atelier", "Atelier", "Amethyst glass, soft edge light & a quiet source canvas", false, "#15121E", "#28223B", "#302940", "#F5F2FF", "#CEC7E3", "#A49CBF", "#AB95F4"),
         new("xcode-dark", "Xcode Dark", "Clockt’s cool charcoal & periwinkle", false, "#14161a", "#191b20", "#202228", "#eceef3", "#a9b0bf", "#858d9d", "#8aa7ff"),
         new("graphite", "Graphite", "Neutral gray & soft sage", false, "#1c1d1d", "#181919", "#242625", "#e7e9e7", "#b2b8b3", "#858e88", "#a2c4af"),
         new("midnight", "Midnight", "Deep navy & muted iris", false, "#151723", "#11131e", "#1e2130", "#e5e5f3", "#acafc8", "#858ba7", "#b3a6ed"),
@@ -39,5 +40,6 @@ public static partial class Palette {
         Mix("AddedFill", Ground, Green, t.Light ? .12 : .13); Mix("RemovedFill", Ground, Red, .13);
         Mix("AddedWord", Ground, Green, .29); Mix("RemovedWord", Ground, Red, .29); Mix("SearchFill", Ground, Amber, .35);
         Mix("OursFill", Ground, OursInk, .18); Mix("TheirsFill", Ground, TheirsInk, .18); Mix("BaseFill", Ground, Faint, .16); Mix("MarkerFill", Ground, Amber, .20);
+        ApplyGlass();
     }
 }

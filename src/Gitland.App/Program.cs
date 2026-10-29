@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Themes.Fluent;
 using Avalonia.Styling;
@@ -21,6 +22,8 @@ public sealed class GitlandApplication : Application {
         RequestedThemeVariant = Palette.Current.Light ? ThemeVariant.Light : ThemeVariant.Dark;
         Styles.Add(new FluentTheme());
         Styles.Add(Palette.Styles());
+        Palette.SyncControlResources();
+        Window.WindowOpenedEvent.AddClassHandler<Window>((window, _) => Palette.AttachWindow(window, window is MainWindow));
     }
     public override void OnFrameworkInitializationCompleted() {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)

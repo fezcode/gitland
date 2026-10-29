@@ -27,7 +27,7 @@ public static class Motion {
             if (e.NameScope.Find("PART_ContentPresenter") is ContentPresenter presenter)
                 // Navigation must clear hover in the same frame the pointer leaves.
                 // Fading independent tab surfaces leaves two apparent hover targets.
-                Bind(presenter, reduced => presenter.Transitions = reduced || button.Classes.Contains("workspace-tab") ? null : new Transitions {
+                Bind(presenter, reduced => presenter.Transitions = reduced || button.Classes.Contains("selection-item") ? null : new Transitions {
                     new BrushTransition { Property = ContentPresenter.BackgroundProperty, Duration = TimeSpan.FromMilliseconds(120), Easing = new CubicEaseOut() }
                 });
         };

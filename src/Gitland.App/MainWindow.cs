@@ -53,7 +53,8 @@ public sealed partial class MainWindow : Window {
     string? _compareLeft, _compareRight;
     string _compareLeftLabel = "Base", _compareRightLabel = "Target";
 
-    public MainWindow(string? path = null, WorkspaceFixture? fixture = null) {
+    public MainWindow(string? path = null, WorkspaceFixture? fixture = null, Func<string, Task<IReadOnlyList<RepoSummary>>>? workspaceScanner = null) {
+        _workspaceScanner = workspaceScanner ?? (root => Task.Run(() => WorkspaceScan.ScanAsync(root)));
         _fixture = fixture; if (fixture != null) _state = fixture.State;
         Title = "Gitland — Diff & Merge"; Width = 1440; Height = 920; MinWidth = 980; MinHeight = 640;
         Icon = new WindowIcon(Avalonia.Platform.AssetLoader.Open(new Uri("avares://gitland/Assets/gitland.ico")));
@@ -61,7 +62,7 @@ public sealed partial class MainWindow : Window {
         UseLayoutRounding = true;
         RenderOptions.SetTextRenderingMode(this, TextRenderingMode.Antialias);
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        TransparencyLevelHint = [WindowTransparencyLevel.Mica, WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.None];
+        TransparencyLevelHint = [WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Blur, WindowTransparencyLevel.None];
         ExtendClientAreaToDecorationsHint = true;
         ExtendClientAreaChromeHints = Avalonia.Platform.ExtendClientAreaChromeHints.NoChrome;
         ExtendClientAreaTitleBarHeightHint = 48;
@@ -126,6 +127,7 @@ public sealed partial class MainWindow : Window {
             e.Cancel = true;
             Run(async () => { if (await MayLeaveMerge()) { _mergeDirty = false; Close(); } });
         };
+        Closed += (_, _) => { ++_workspaceScanId; WatchWorkspace(null); };
     }
 
     static void Add(Grid grid, Control child, int row, int column = 0) { Grid.SetRow(child, row); Grid.SetColumn(child, column); grid.Children.Add(child); }
@@ -142,7 +144,7 @@ public sealed partial class MainWindow : Window {
         if (mode == "merge") { _fileScope = "conflicts"; _filter = "all"; }
         if (mode == "changes") _fileScope = "changed";
         _mode = mode; _selected = null; _externalLeft = null; RenderNavigation(); RenderContext(); RenderFiles();
-        if (mode == "workspace") { await EnterWorkspace(); return; }
+        if (mode == "workspace") { EnterWorkspace(); return; }
         if (_repo == null && _fixture == null && mode != "threeway") { ShowWelcome(); return; }
         if (mode is "repository" or "github") { await LoadManagement(); return; }
         if (mode == "threeway") { await EnterThreeWay(); return; }
@@ -340,7 +342,7 @@ public sealed partial class MainWindow : Window {
         if (!await MayLeaveMerge()) return;
         if (_mode == "threeway" && _threeLocalPaths != null) { await ShowThreeLocalFiles(_threeLocalPaths); return; }
         if (_mode == "files" && _externalLeft != null && _externalRight != null) { await ShowLocalFiles(_externalLeft, _externalRight); return; }
-        if (_mode == "workspace") { await ScanWorkspace(); return; }
+        if (_mode == "workspace") { StartWorkspaceScan(); return; }
         if (_repo == null) { _status.Text = "Open a repository to refresh its changes."; return; }
         _state = await _repo.ReadStateAsync(); _management = await _repo.ReadManagementAsync();
         // A refresh can arrive from the watcher while files are ticked; keep the ones still there.

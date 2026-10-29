@@ -54,7 +54,7 @@ public sealed partial class MainWindow {
         _decisionActions = Row(); Add(decision, _decisionActions, 0, 1); Add(grid, decision, 4);
 
         var output = new Grid { RowDefinitions = new RowDefinitions("Auto,*") };
-        var outputHeader = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(14, 10) };
+        var outputHeader = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(14, 8) };
         var resultLabel = Row(Icon("diff", Green, 16), Text("Merged result", 15, strong: true), Badge("EDITABLE", Green)); outputHeader.Children.Add(resultLabel);
         _resetManualButton = Button("Reset manual edits", () => Run(ResetManual)); _resetManualButton.Classes.Add("quiet");
         var fullSources = new CheckBox { Content = "Full sources", FontSize = 11 };

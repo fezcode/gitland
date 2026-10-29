@@ -46,7 +46,7 @@ public sealed partial class MainWindow {
     async Task ShowSettings() {
         if (_settingsWindow != null) { _settingsWindow.Activate(); return; }
         if (_busy || OwnedWindows.Count > 0) return;
-        var dialog = _settingsWindow = new Window { Title = "Gitland Settings", Width = 840, Height = 640, MinWidth = 700, MinHeight = 560, Background = Ground, Foreground = Ink, FontFamily = Sans, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+        var dialog = _settingsWindow = new Window { Title = "Gitland Settings", Width = 900, Height = Math.Clamp(Bounds.Height - 80, 560, 780), MinWidth = 700, MinHeight = 560, Background = Ground, Foreground = Ink, FontFamily = Sans, WindowStartupLocation = WindowStartupLocation.CenterOwner };
         var shell = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
         var heading = Col(Text("Settings", 23, strong: true), Text("Make Gitland feel like your workspace.", 12, Muted)); heading.Spacing = 7;
         Add(shell, new Border { Child = heading, Padding = new Thickness(26, 22), BorderBrush = Hairline, BorderThickness = new Thickness(0, 0, 0, 1) }, 0);
@@ -64,21 +64,19 @@ public sealed partial class MainWindow {
             var page = new StackPanel { Spacing = 22, Margin = new Thickness(26, 24) };
             if (selected == "appearance") {
                 page.Children.Add(Col(Text("Color theme", 17, strong: true), Paragraph("Colors for the interface, diffs, and merge editor.")));
-                var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), RowDefinitions = new RowDefinitions("Auto,Auto"), ColumnSpacing = 12, RowSpacing = 12 };
-                for (int i = 0; i < Themes.Length; i++) {
-                    var theme = Themes[i]; bool active = theme.Id == GitlandApplication.Preferences.Theme;
+                var choices = new WrapPanel();
+                foreach (var theme in Themes) {
+                    bool active = theme.Id == GitlandApplication.Preferences.Theme;
                     var tile = Button("Use " + theme.Name + " theme", () => { if (SavePreferences(GitlandApplication.Preferences with { Theme = theme.Id })) Render(); });
-                    tile.HorizontalAlignment = HorizontalAlignment.Stretch; tile.HorizontalContentAlignment = HorizontalAlignment.Stretch; tile.Padding = new Thickness(0);
-                    tile.BorderBrush = Hairline; tile.BorderThickness = new Thickness(1); tile.Background = active ? SelectedSurface : Raised;
-                    var preview = new Grid { ColumnDefinitions = new ColumnDefinitions("34,*"), Height = 62, Background = Brush(theme.Ground) };
-                    preview.Children.Add(new Border { Background = Brush(theme.Bar) });
-                    var code = new StackPanel { Spacing = 6, Margin = new Thickness(12, 12) };
-                    foreach (double width in new[] { 85d, 120d, 64d }) code.Children.Add(new Border { Width = width, Height = 3, CornerRadius = new CornerRadius(2), HorizontalAlignment = HorizontalAlignment.Left, Background = Brush(width == 120 ? theme.Accent : theme.Muted), Opacity = width == 85 ? .5 : .8 });
-                    Add(preview, code, 0, 1);
-                    var label = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(12, 10) }; label.Children.Add(Text(theme.Name, 12, strong: true)); if (active) Add(label, Icon("check", Ink, 14), 0, 1);
-                    tile.Content = Col(preview, label); ToolTip.SetTip(tile, theme.Description); Add(grid, tile, i / 2, i % 2);
+                    tile.Classes.Add("selection-item"); tile.Classes.Set("selected", active);
+                    tile.Width = 160; tile.HorizontalContentAlignment = HorizontalAlignment.Left; tile.Margin = new Thickness(0, 0, 8, 8);
+                    tile.Background = active ? SelectedSurface : ButtonFill;
+                    tile.Content = Row(new Border { Width = 13, Height = 13, CornerRadius = new CornerRadius(7), Background = Brush(theme.Accent) }, Text(theme.Name, 12, strong: active));
+                    ToolTip.SetTip(tile, theme.Description); choices.Children.Add(tile);
                 }
-                page.Children.Add(grid); page.Children.Add(Paragraph("Themes apply immediately. Your open files and merge edits stay in place.", Faint));
+                page.Children.Add(choices);
+                if (GitlandApplication.Preferences.Theme == "atelier") page.Children.Add(GlassControls(Render));
+                page.Children.Add(Paragraph("Themes apply immediately. Your open files and merge edits stay in place.", Faint));
                 var reduceMotion = new CheckBox { Content = "Reduce motion", IsChecked = GitlandApplication.Preferences.ReduceMotion };
                 reduceMotion.IsCheckedChanged += (_, _) => SavePreferences(GitlandApplication.Preferences with { ReduceMotion = reduceMotion.IsChecked == true });
                 page.Children.Add(Col(reduceMotion, Paragraph("Turn off hover fades, graph emphasis transitions, and content fades. Changes appear immediately.", Faint)));
@@ -140,7 +138,7 @@ public sealed partial class MainWindow {
                 page.Children.Add(Paragraph("The Gitland menu remains available in the title bar.", Faint));
             } else {
                 page.Children.Add(Col(Logo(56), Text("Gitland " + typeof(MainWindow).Assembly.GetName().Version?.ToString(3), 23, strong: true), Paragraph("A workspace for changes, comparisons and confident merges.")));
-                page.Children.Add(Paragraph("Built with .NET and Avalonia. Xcode Dark follows Clockt’s palette. Geist, Inter, Cascadia Code, IBM Plex Sans, and Source Serif 4 are bundled with their licenses."));
+                page.Children.Add(Paragraph("Built with .NET and Avalonia. Atelier follows Atelier’s tinted glass theme; Xcode Dark follows Clockt’s palette. Geist, Inter, Cascadia Code, IBM Plex Sans, and Source Serif 4 are bundled with their licenses."));
                 page.Children.Add(Paragraph("Ctrl+O · Open repository\nCtrl+Enter · Commit staged changes\nCtrl+, · Settings\nF11 · Enter or leave full screen\nEscape · Leave full screen", Faint));
             }
             content.Content = page;

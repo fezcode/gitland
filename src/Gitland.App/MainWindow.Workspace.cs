@@ -15,6 +15,9 @@ public sealed partial class MainWindow {
     string _workspaceShow = "all";
     int _workspaceScanId;
     bool _workspaceScanning;
+    readonly Func<string, Task<IReadOnlyList<RepoSummary>>> _workspaceScanner;
+    string? _workspaceRowsRoot;
+    public bool IsScanningWorkspace => _workspaceScanning;
     FileSystemWatcher? _workspaceWatcher;
     DispatcherTimer? _workspaceTimer;
     readonly HashSet<string> _workspaceTouched = new(StringComparer.OrdinalIgnoreCase);
@@ -30,11 +33,14 @@ public sealed partial class MainWindow {
         await SetMode("workspace");
     }
 
-    async Task EnterWorkspace() {
-        RenderWorkspace();
-        await ScanWorkspace();
+    void EnterWorkspace() {
         WatchWorkspace(WorkspaceRoot);
+        StartWorkspaceScan();
     }
+
+    // Scanning is read-only background work, not an exclusive Git action. Keep the task
+    // observed, but release RunCore immediately so navigation and settings stay available.
+    void StartWorkspaceScan() => _ = ScanWorkspace();
 
     async Task ChooseWorkspaceFolder() {
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "Choose a folder that holds your repositories", AllowMultiple = false });
@@ -46,16 +52,22 @@ public sealed partial class MainWindow {
     async Task ScanWorkspace() {
         int id = ++_workspaceScanId;
         string? root = WorkspaceRoot;
+        if (!string.Equals(root, _workspaceRowsRoot, StringComparison.OrdinalIgnoreCase)) _workspaceRows = [];
+        _workspaceRowsRoot = root;
         // Until the scan answers, the table would claim the folder is empty; say it is being read.
         _workspaceScanning = root != null;
         if (root != null && _mode == "workspace") { RenderWorkspace(); _status.Text = "Scanning " + root + "…"; }
         IReadOnlyList<RepoSummary> rows;
-        try { rows = root == null ? [] : await WorkspaceScan.ScanAsync(root); }
+        string? error = null;
+        try { rows = root == null ? [] : await _workspaceScanner(root); }
+        catch (Exception e) { rows = _workspaceRows; error = e.Message; }
         finally { if (id == _workspaceScanId) _workspaceScanning = false; }
         if (id != _workspaceScanId) return;
         _workspaceRows = rows;
-        if (_mode == "workspace") { RenderWorkspace(); RenderContext(); }
-        _status.Text = root == null ? "Choose a folder to see the repositories inside it." : $"{rows.Count} {(rows.Count == 1 ? "repository" : "repositories")} in {root}";
+        if (_mode == "workspace") {
+            RenderWorkspace(); RenderContext();
+            _status.Text = error != null ? "Could not scan workspace: " + error : root == null ? "Choose a folder to see the repositories inside it." : $"{rows.Count} {(rows.Count == 1 ? "repository" : "repositories")} in {root}";
+        }
     }
 
     /// <summary>Re-reads only the repositories the watcher saw activity in. A repository appearing
@@ -98,12 +110,13 @@ public sealed partial class MainWindow {
             lock (_workspaceTouched) {
                 if (_workspaceTouched.Count == 0) return;
                 // Never rescan underneath a dialog, a running action, or an unsaved merge result.
-                if (_busy || _mergeDirty || OwnedWindows.Count > 0 || _mode != "workspace") return;
+                if (_busy || _workspaceScanning || _mergeDirty || OwnedWindows.Count > 0 || _mode != "workspace") return;
                 touched = [.. _workspaceTouched]; _workspaceTouched.Clear();
             }
-            _workspaceTimer!.Stop();
+            var timer = _workspaceTimer!;
+            timer.Stop();
             try { await RescanTouched(touched); } catch (Exception) { /* a half-written index recovers on the next tick */ }
-            _workspaceTimer.Start();
+            if (ReferenceEquals(timer, _workspaceTimer)) timer.Start();
         };
 
         try {
@@ -148,7 +161,7 @@ public sealed partial class MainWindow {
         var title = Col(Text(root ?? "No folder chosen", 14, strong: true), Text(summaryLine, 11, Faint));
         title.Spacing = 6; heading.Children.Add(title);
         var choose = Button(root == null ? "Choose folder" : "Change folder", () => Run(ChooseWorkspaceFolder), "folder");
-        var rescan = Button("Rescan", () => Run(ScanWorkspace), "refresh"); rescan.IsEnabled = root != null && !_workspaceScanning;
+        var rescan = Button("Rescan", () => Run(() => { StartWorkspaceScan(); return Task.CompletedTask; }), "refresh"); rescan.IsEnabled = root != null && !_workspaceScanning;
         var fetchAll = Button("Fetch all", () => Run(() => WorkspaceBulk("fetch")), "down");
         var pullAll = Button("Pull all", () => Run(() => WorkspaceBulk("pull")));
         var pushAll = Button("Push all", () => Run(() => WorkspaceBulk("push")), "up");

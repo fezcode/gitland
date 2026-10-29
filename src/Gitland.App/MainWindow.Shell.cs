@@ -20,10 +20,12 @@ public sealed partial class MainWindow {
     Button? _maximizeButton;
     WindowState _beforeFullscreen = WindowState.Normal;
     Control BuildShell() {
-        _shell = new Grid { RowDefinitions = new RowDefinitions("48,*,24"), Background = Bar, Name = "WindowShell" };
-        var titlebar = _titlebar = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), Background = Bar };
+        _shell = new Grid { RowDefinitions = new RowDefinitions("48,*,26"), Background = Backdrop, Name = "WindowShell" };
+        var sheen = new Border { Name = "WindowSheen", Background = Sheen, IsHitTestVisible = false }; Grid.SetRowSpan(sheen, 3); _shell.Children.Add(sheen);
+        var titlebar = _titlebar = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), Background = Chrome };
         var appMenu = Button("Gitland menu", ShowAppMenu); appMenu.Classes.Add("quiet");
-        appMenu.Content = Row(Logo(29), Text("gitland", 16, strong: true), Icon("down", Faint, 10)); appMenu.Margin = new Thickness(12, 0, 26, 0);
+        var wordmark = Text("GITLAND", 12, strong: true); wordmark.LetterSpacing = 1.8;
+        appMenu.Content = Row(Logo(25), wordmark, Icon("down", Faint, 10)); appMenu.Margin = new Thickness(12, 0, 26, 0);
         titlebar.Children.Add(appMenu);
         var breadcrumb = Row(Icon("folder", Faint, 13), _repoName, Text("/", 12, Faint), Icon("branch", Accent, 13), _branch); breadcrumb.ClipToBounds = true; Add(titlebar, breadcrumb, 0, 1);
         _repoName.FontSize = 12; _repoName.FontWeight = FontWeight.Medium; _repoName.MaxWidth = 170; _branch.MaxWidth = 210; _branch.Foreground = Muted;
@@ -41,18 +43,18 @@ public sealed partial class MainWindow {
         var body = new Grid { Name = "WorkspaceColumns", ColumnDefinitions = new ColumnDefinitions("64,280,5,*") };
         double sidebarWidth = GitlandApplication.Preferences.SidebarWidth;
         body.ColumnDefinitions[1].MinWidth = 220;
-        var rail = new Grid { RowDefinitions = new RowDefinitions("*,Auto"), Background = Ground };
-        _navigation.Orientation = Orientation.Vertical; _navigation.Margin = new Thickness(5, 14); _navigation.Spacing = 9;
+        var rail = new Grid { RowDefinitions = new RowDefinitions("*,Auto"), Background = Brushes.Transparent };
+        _navigation.Orientation = Orientation.Vertical; _navigation.Margin = new Thickness(6, 12); _navigation.Spacing = 6;
         rail.Children.Add(_navigation);
         var settings = IconButton("Settings", () => _ = ShowSettings(), "settings"); settings.Classes.Add("quiet"); settings.Margin = new Thickness(0, 12); settings.HorizontalAlignment = HorizontalAlignment.Center; Add(rail, settings, 1);
         body.Children.Add(rail);
-        var sidebar = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,*,Auto,Auto"), Background = Bar };
+        var sidebar = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,*,Auto,Auto"), Background = Pane };
         var filesHeader = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), ColumnSpacing = 10, Margin = new Thickness(17, 19, 12, 14) };
         _sidebarContext.FontSize = 17; _sidebarContext.Foreground = Ink;
         filesHeader.Children.Add(_sidebarContext); Add(filesHeader, _fileCount, 0, 1);
         _stageAllButton = IconButton("Stage all changes", () => Run(async () => { if (_repo == null) return; await _repo.StageAllAsync(); await Refresh(); }), "plus");
         _stageAllButton.Classes.Add("quiet"); ToolTip.SetTip(_stageAllButton, "Stage all changes"); Add(filesHeader, _stageAllButton, 0, 2); Add(sidebar, filesHeader, 0);
-        var scopes = new Border { Child = _fileScopes, Background = Ground, CornerRadius = new CornerRadius(7), Padding = new Thickness(3), Margin = new Thickness(12, 0, 12, 10) }; Add(sidebar, scopes, 1);
+        var scopes = new Border { Child = _fileScopes, Background = ButtonFill, BorderBrush = RimLight, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(9), Padding = new Thickness(3), Margin = new Thickness(12, 0, 12, 10) }; Add(sidebar, scopes, 1);
         _fileSearch.Margin = new Thickness(12, 0, 12, 8); _fileSearch.FontSize = 12; Add(sidebar, _fileSearch, 2);
         _changeFilters.Margin = new Thickness(12, 0, 8, 10); Add(sidebar, _changeFilters, 3);
         _fileList.Spacing = 1;
@@ -78,18 +80,18 @@ public sealed partial class MainWindow {
         splitter.DragCompleted += (_, _) => { if (sidebarDragged) SaveSidebar(); };
         splitter.KeyUp += (_, e) => { if (e.Key is Key.Left or Key.Right) SaveSidebar(); };
         Add(body, splitter, 0, 2);
-        var content = new Grid { RowDefinitions = new RowDefinitions("Auto,*"), Background = Bar };
+        var content = new Grid { RowDefinitions = new RowDefinitions("Auto,*"), Background = Brushes.Transparent };
         _contextBar.Margin = new Thickness(22, 19); Add(content, _contextBar, 0);
-        _workspaceFrame = new Border { Background = Ground, ClipToBounds = true, CornerRadius = new CornerRadius(4), BorderBrush = Hairline, BorderThickness = new Thickness(1), Child = _workspace, Margin = new Thickness(16, 0, 16, 16) };
+        _workspaceFrame = new Border { Background = Ground, ClipToBounds = true, CornerRadius = new CornerRadius(12), BorderBrush = RimLight, BorderThickness = new Thickness(1), Child = _workspace, Margin = new Thickness(16, 0, 16, 16) };
         Add(content, _workspaceFrame, 1); Add(body, content, 0, 3); Add(_shell, body, 1);
-        var status = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Background = Ground };
+        var status = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Background = Chrome };
         _status.FontSize = 10; _status.Foreground = Faint; _status.Margin = new Thickness(14, 0); status.Children.Add(_status);
         var shortcuts = Text("Ctrl+Enter  Commit     Ctrl+,  Settings     F11  Full screen", 10, Faint); shortcuts.Margin = new Thickness(14, 0); Add(status, shortcuts, 0, 1);
         Add(_shell, new Border { Child = status, BorderBrush = Hairline, BorderThickness = new Thickness(0, 1, 0, 0) }, 2);
         void Density() {
             bool compact = Bounds.Width < 1180;
-            body.ColumnDefinitions[0].Width = new GridLength(compact ? 52 : 64);
-            double maximum = Math.Clamp(Bounds.Width - (compact ? 52 : 64) - 5 - 520, 220, 600);
+            body.ColumnDefinitions[0].Width = new GridLength(compact ? 52 : 76);
+            double maximum = Math.Clamp(Bounds.Width - (compact ? 52 : 76) - 5 - 520, 220, 600);
             body.ColumnDefinitions[1].MaxWidth = maximum;
             bool showFiles = _mode != "repository";
             sidebar.IsVisible = splitter.IsVisible = showFiles;
@@ -142,7 +144,7 @@ public sealed partial class MainWindow {
             var layout = Col(glyph, Text(shortLabel, 9, active ? Ink : Faint, active)); layout.Spacing = 7;
             foreach (var child in layout.Children) child.HorizontalAlignment = HorizontalAlignment.Center;
             var button = Button(label, () => Run(async () => { if (id is "tags" or "repository") { _repositoryTab = id == "tags" ? "Tags" : "History"; await SetMode("repository"); } else await SetMode(id == "merge" && !_state.Changes.Any(c => c.IsConflict) ? "threeway" : id); })); button.Content = layout; button.HorizontalAlignment = HorizontalAlignment.Stretch; button.HorizontalContentAlignment = HorizontalAlignment.Center; button.Padding = new Thickness(0, 10); button.MinHeight = 59;
-            button.Classes.Add("workspace-tab"); button.Classes.Add("selection-item"); button.Classes.Set("selected", active); button.Background = active ? SelectedSurface : Brushes.Transparent; button.BorderBrush = Brushes.Transparent; button.BorderThickness = new Thickness(0); button.CornerRadius = new CornerRadius(4);
+            button.Classes.Add("workspace-tab"); button.Classes.Add("selection-item"); button.Classes.Set("selected", active); button.Background = active ? SelectedSurface : Brushes.Transparent; button.BorderBrush = Brushes.Transparent; button.BorderThickness = new Thickness(0); button.CornerRadius = new CornerRadius(9);
             ToolTip.SetTip(button, label);
             _navigation.Children.Add(button);
         }

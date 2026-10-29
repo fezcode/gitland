@@ -8,7 +8,15 @@ Version 0.6 replaces the horizontal tab strip with a navigation rail and gives f
 
 ## Selection treatment
 
-Selected navigation, files, settings pages, and conflict choices share a neutral background. There are no accent-edge selection indicators. Hover is quieter than selection; a full outline is reserved for keyboard focus. File-state headings use ordinary title case without decorative dots. Semantic colors remain on diff lines, merge alternatives, and file-state indicators.
+Selected navigation, files, settings pages, and conflict choices share one filled surface, softly tinted in Atelier. There are no accent-edge selection indicators. Hover changes immediately on selectable rows so a fading previous row cannot create a second hover target; a full outline is reserved for keyboard focus. File-state headings use ordinary title case without decorative dots. Semantic colors remain on diff lines, merge alternatives, and file-state indicators.
+
+## Atelier appearance
+
+The Atelier preset adapts the sibling Atelier app's `Theme/GlassTheme.cs` and `App.axaml`: amethyst-tinted near-black, lifted violet accents, white edge light, and a subtle sky/peach sheen. The title bar, sidebar and status bar sit on the glass; source and merge surfaces remain opaque. Rounded workspaces and controls use the same palette as Fluent menus, flyouts, combo boxes and tooltips.
+
+Settings → Appearance exposes Mica, Acrylic, Blur and Solid, seven tint presets, a hue slider, a custom six-digit hex color, and glassiness, transparency and color-strength sliders. Colors apply immediately without rebuilding editors or losing drafts. Solid disables OS transparency; unavailable compositor materials fall back to the opaque tinted base. Green/red Git meanings are independent of the chosen tint. Existing theme and font choices are preserved, and Atelier with Acrylic is the default for new settings. Resetting appearance restores Acrylic; explicitly saved material choices are preserved.
+
+The native `--atelier` preview checks live tint changes, custom-color validation, hue/hex synchronization, saved appearance, opaque fallback, resetting, and theme switching with unsaved merge text. It renders the diff, compact window, merge workspace and appearance dialog; the offscreen renderer cannot show the Windows compositor's actual Mica or acrylic blur.
 
 ## Changes and committing
 
@@ -71,3 +79,5 @@ The New commit expand control opens a separate resizable writing window. The sub
 The rail has one Merge entry. Its contextual switch selects conflict resolution or three-way revision review. Both share the same navigation selection; switching away from an edited merge retains the unsaved-work check. Source arrows have accessible action names and tooltips. The wand marks deterministic Magic resolve. Tags has a dedicated rail entry and search by name, annotation, or commit.
 
 Production opens an empty welcome page. Sample repository content lives exclusively in the validation project and never enters the shipped assembly.
+
+Workspace scans run in the background, including folder enumeration. Navigation, settings and refresh stay usable while scanning; late results never change another view or its status, and older scans cannot replace newer results. The `--workspace-navigation` preview verifies these cases with deliberately delayed scans.

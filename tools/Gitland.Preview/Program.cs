@@ -50,6 +50,8 @@ if (args.Contains("--history-review")) { Finish(ExerciseHistoryReview()); window
 Finish(window.PreviewDiff()); Save("diff.png");
 ExerciseNavigationHover();
 if (args.Contains("--navigation-hover")) { window.Close(); return; }
+if (args.Contains("--atelier")) { Finish(ExerciseAtelierAppearance()); window.Close(); return; }
+if (args.Contains("--workspace-navigation")) { Finish(ExerciseWorkspaceNavigation()); window.Close(); return; }
 Check(Buttons("Merge").Count() == 1 && !Buttons("Three-way comparison").Any() && !Buttons("Resolve conflicts").Any(), "A single Merge navigation entry replaces the two separate workspaces.");
 
 var canvas = window.GetVisualDescendants().OfType<DiffCanvas>().Single();
@@ -351,6 +353,47 @@ void ExerciseNavigationHover() {
     Check(others.All(b => Fill(b).A == 0), "Moving out of the sidebar leaves no stale hover highlights.");
     Save("sidebar-hover.png");
 }
+async Task ExerciseAtelierAppearance() {
+    Check(Palette.Current.Id == "atelier", "Atelier is the default for new settings.");
+    Check(Palette.Appearance.Material == "acrylic" && window.TransparencyLevelHint[0] == WindowTransparencyLevel.AcrylicBlur, "New windows request Acrylic by default.");
+    Check(Palette.Ground.Color.A == 255, "The source canvas stays opaque over glass chrome.");
+    Check(window.ActualTransparencyLevel != WindowTransparencyLevel.None || ReferenceEquals(window.Background, Palette.GlassBase), "Unavailable backdrop composition uses an opaque tinted fallback.");
+    Save("atelier-diff.png");
+    window.Width = 980; window.Height = 640; Pump(); Save("atelier-compact.png");
+    window.Width = 1440; window.Height = 920; Pump();
+    await window.PreviewMerge(); Pump();
+    var editor = window.GetVisualDescendants().OfType<MergeEditor>().Single(e => !e.IsReadOnly);
+    editor.Text += "\n// preserve this draft"; string draft = editor.Text!;
+    Click("Settings"); var dialog = window.OwnedWindows.Single();
+    void Choose(string name) { dialog.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == name).RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    SaveDialog(dialog, "atelier-settings.png");
+    var original = Palette.Accent.Color;
+    Choose("Use Sky tint");
+    Check(Palette.Accent.Color != original && new SettingsStore(settingsPath).Load().Appearance?.Tint == "#6CC3F2", "Changing tint restyles live controls and persists the selected color.");
+    var custom = dialog.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "GlassTint");
+    custom.Text = "#EC8DCB"; custom.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter }); Pump();
+    Check(new SettingsStore(settingsPath).Load().Appearance?.Tint == "#EC8DCB", "Custom hex colors apply and persist.");
+    custom.Text = "oops"; custom.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter }); Pump();
+    Check(new SettingsStore(settingsPath).Load().Appearance?.Tint == "#EC8DCB", "An invalid custom tint cannot overwrite the saved color.");
+    dialog.GetVisualDescendants().OfType<Slider>().Single(s => s.Name == "GlassHue").Value = 180; Pump();
+    Check(new SettingsStore(settingsPath).Load().Appearance?.Tint != "#EC8DCB" && custom.Text == new SettingsStore(settingsPath).Load().Appearance?.Tint, "The hue slider recolors the interface and keeps the hex field synchronized.");
+    custom.Text = "#FFFFFF"; custom.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter }); Pump();
+    double Luminance(Color c) { double Linear(byte value) { double channel = value / 255d; return channel <= .04045 ? channel / 12.92 : Math.Pow((channel + .055) / 1.055, 2.4); } return .2126 * Linear(c.R) + .7152 * Linear(c.G) + .0722 * Linear(c.B); }
+    Check(new[] { Palette.PrimaryFill, Palette.PrimaryHover, Palette.PrimaryPressed }.All(b => (Luminance(Palette.OnPrimary.Color) + .05) / (Luminance(b.Color) + .05) >= 4.5), "Even a white tint retains readable primary labels in normal, hover and pressed states.");
+    Choose("Use Mica material");
+    var slider = dialog.GetVisualDescendants().OfType<Slider>().Single(s => s.Name == "GlassTransparency"); slider.Value = .8; Pump();
+    Check(new SettingsStore(settingsPath).Load().Appearance?.Transparency == .8 && Palette.Backdrop.Color.A < 160, "Transparency changes the shell live and persists.");
+    Choose("Use Solid material");
+    Check(window.TransparencyLevelHint.SequenceEqual(new[] { WindowTransparencyLevel.None }) && Palette.Backdrop.Color.A == 255, "Solid disables the OS backdrop and paints an opaque base.");
+    Choose("Use Paper theme");
+    Check(Palette.Sheen.GradientStops.All(s => s.Color.A == 0) && editor.Text == draft, "Switching away removes the sheen and preserves unsaved merge edits.");
+    Choose("Use Atelier theme"); Choose("Reset Atelier appearance");
+    Check(new SettingsStore(settingsPath).Load().Appearance == new GlassAppearance(), "Reset restores the original Atelier appearance.");
+    Choose("Done"); Save("atelier-merge.png");
+    Check(editor.Text == draft && Palette.Green.Color != Palette.Red.Color, "Appearance controls preserve merge text and distinct Git change colors.");
+    ExerciseNavigationHover();
+    await window.PreviewManagement(); Save("atelier-repository.png");
+}
 async Task ExerciseHistoryReview() {
     string root = Path.Combine(output, "history-review-" + Guid.NewGuid().ToString("N"));
     Directory.CreateDirectory(root); var repo = new GitRepository(root); await repo.Git("init", "-b", "main");
@@ -636,7 +679,11 @@ async Task ExerciseRepository() {
     // The first render happens before the scan answers; it must say it is reading, not that the folder is empty.
     var firstTexts = window.GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
     Check(firstTexts.Contains("Scanning for repositories") && !firstTexts.Contains("No repositories here"), "Workspace shows it is scanning, not an empty folder, while the first scan runs.");
-    await opening; await WaitForAction();
+    await opening;
+    var scanDeadline = DateTime.UtcNow.AddSeconds(40);
+    while (window.IsScanningWorkspace && DateTime.UtcNow < scanDeadline) await Task.Delay(20);
+    Check(!window.IsScanningWorkspace, "Workspace background scan completes.");
+    await WaitForAction();
     Check(Buttons(syncedName).Length == 1 && Buttons(aheadName).Length == 1 && Buttons(otherName).Length == 1, "Workspace lists every repository sitting directly inside the scanned folder.");
     Check(!Buttons("ui-fixture-origin.git").Any(), "A bare repository beside the working copies is not offered as a row to open.");
     Check(RowText(syncedName).Contains("clean"), "A committed, in-sync repository reads as clean.");
@@ -680,6 +727,44 @@ async Task ExerciseRepository() {
         foreach (var file in Directory.EnumerateFiles(fixture, "*", SearchOption.AllDirectories)) File.SetAttributes(file, FileAttributes.Normal);
         Directory.Delete(fixture, true);
     }
+}
+async Task ExerciseWorkspaceNavigation() {
+    var pending = new List<TaskCompletionSource<IReadOnlyList<RepoSummary>>>();
+    var probe = new MainWindow(fixture: Demo.Fixture, workspaceScanner: _ => {
+        var completion = new TaskCompletionSource<IReadOnlyList<RepoSummary>>();
+        pending.Add(completion); return completion.Task;
+    });
+    Button Find(string name) => probe.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == name);
+    void Choose(string name) { Find(name).RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    string Status() => ((TextBlock)typeof(MainWindow).GetField("_status", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(probe)!).Text ?? "";
+    bool HasDiff() => probe.GetVisualDescendants().OfType<DiffCanvas>().Any();
+    RepoSummary Summary(string name) => new(name, Path.Combine(output, name), "main", 0, 0, 0, 0, 0, 0, 0);
+    try {
+        probe.Show(); Pump(); await probe.OpenWorkspace(output); Pump();
+        Check(probe.IsScanningWorkspace && !probe.IsWorking && !Find("Rescan").IsEnabled, "Workspace scans without taking the exclusive action lock.");
+        Choose("Settings"); Check(probe.OwnedWindows.Count == 1, "Settings remains available during a scan.");
+        probe.OwnedWindows.Single().Close(); Pump();
+        Choose("Working changes");
+        Check(HasDiff() && !pending[0].Task.IsCompleted, "Working changes opens before the scan completes.");
+        string status = Status(); pending[0].SetResult([Summary("old-folder")]); Pump();
+        Check(HasDiff() && Status() == status, "A late scan cannot replace the current view or status.");
+
+        Choose("Workspace");
+        Check(probe.IsScanningWorkspace && !probe.IsWorking, "Entering Workspace from the sidebar also leaves navigation unlocked.");
+        Choose("Refresh · F5");
+        Check(pending.Count == 3 && !probe.IsWorking, "F5 starts a background rescan without locking navigation.");
+        pending[2].SetResult([Summary("new-result")]); Pump();
+        status = Status(); pending[1].SetResult([Summary("stale-result")]); Pump();
+        Check(Find("new-result").IsVisible && Status() == status, "An older scan cannot overwrite a newer result.");
+        Choose("Rescan");
+        Check(probe.IsScanningWorkspace && !probe.IsWorking, "The Rescan button releases the action lock too.");
+        Choose("Working changes"); pending[3].SetException(new IOException("Unavailable folder")); Pump();
+        Check(HasDiff() && probe.OwnedWindows.Count == 0, "A failed background scan does not interrupt another view with a dialog.");
+        Choose("Workspace"); pending[4].SetException(new IOException("Unavailable folder")); Pump();
+        Check(!probe.IsScanningWorkspace && Find("Rescan").IsEnabled && Status().Contains("Unavailable folder"), "Scan failures are visible and can be retried in Workspace.");
+        Choose("Rescan"); probe.Close(); pending[5].SetResult([Summary("after-close")]); Pump();
+        Check(!probe.IsVisible && probe.OwnedWindows.Count == 0, "Closing during a scan safely ignores its late completion.");
+    } finally { probe.Close(); }
 }
 async Task WaitForAction() {
     var deadline = DateTime.UtcNow.AddSeconds(40);
