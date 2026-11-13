@@ -51,6 +51,7 @@ Finish(window.PreviewDiff()); Save("diff.png");
 ExerciseNavigationHover();
 if (args.Contains("--navigation-hover")) { window.Close(); return; }
 if (args.Contains("--atelier")) { Finish(ExerciseAtelierAppearance()); window.Close(); return; }
+if (args.Contains("--lavender")) { Finish(ExerciseLavenderTheme()); window.Close(); return; }
 if (args.Contains("--workspace-navigation")) { Finish(ExerciseWorkspaceNavigation()); window.Close(); return; }
 Check(Buttons("Merge").Count() == 1 && !Buttons("Three-way comparison").Any() && !Buttons("Resolve conflicts").Any(), "A single Merge navigation entry replaces the two separate workspaces.");
 
@@ -352,6 +353,25 @@ void ExerciseNavigationHover() {
     window.MouseMove(new Point(500, 70)); Dispatcher.UIThread.RunJobs();
     Check(others.All(b => Fill(b).A == 0), "Moving out of the sidebar leaves no stale hover highlights.");
     Save("sidebar-hover.png");
+}
+async Task ExerciseLavenderTheme() {
+    Click("Settings"); var dialog = window.OwnedWindows.Single();
+    void Choose(string name) { dialog.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == name).RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Pump(); }
+    Choose("Use Lavender theme");
+    Check(new SettingsStore(settingsPath).Load().Theme == "lavender" && Application.Current!.RequestedThemeVariant == Avalonia.Styling.ThemeVariant.Light, "Lavender persists through settings and uses light native controls.");
+    Check(window.TransparencyLevelHint.SequenceEqual(new[] { WindowTransparencyLevel.None }) && Palette.Sheen.GradientStops.All(s => s.Color.A == 0), "Lavender switches from glass to opaque ivory and lavender surfaces.");
+    SaveDialog(dialog, "lavender-settings.png"); Choose("Done"); Save("lavender-diff.png");
+    Click("Unified"); Save("lavender-unified.png"); Click("Side by side");
+    await window.PreviewMerge(); Pump();
+    var editor = window.GetVisualDescendants().OfType<MergeEditor>().Single(e => !e.IsReadOnly);
+    editor.Text += "\n// keep my draft"; string draft = editor.Text!;
+    Save("lavender-merge.png");
+    Click("Settings"); dialog = window.OwnedWindows.Single();
+    Choose("Use Atelier theme"); Choose("Use Lavender theme"); Choose("Done");
+    Check(editor.Text == draft, "Switching between Lavender and Atelier preserves unsaved merge text.");
+    Check(Palette.AddedFill.Color != Palette.RemovedFill.Color && Palette.OursFill.Color != Palette.TheirsFill.Color, "Lavender keeps additions, deletions and merge sides distinct after a theme round trip.");
+    await window.PreviewManagement(); Click("Repository"); await WaitForAction(); Save("lavender-history.png");
+    window.Width = 980; window.Height = 640; Pump(); Save("lavender-compact.png");
 }
 async Task ExerciseAtelierAppearance() {
     Check(Palette.Current.Id == "atelier", "Atelier is the default for new settings.");

@@ -4,7 +4,7 @@ namespace Gitland.Core;
 
 public sealed record UserSettings(string Theme = "atelier", double CodeSize = 13, bool HoswlEnabled = false, bool DefaultUnified = false, bool SyncMergeScroll = true, string InterfaceFont = "geist", string CodeFont = "geist-mono", double SidebarWidth = 0, IReadOnlyList<string>? RecentRepositories = null, string? WorkspaceRoot = null, bool ReduceMotion = false, GlassAppearance? Appearance = null) {
     public UserSettings Normalize() => this with {
-        Theme = Theme is "atelier" or "xcode-dark" or "graphite" or "midnight" or "paper" ? Theme : "atelier",
+        Theme = Theme is "atelier" or "lavender" or "xcode-dark" or "graphite" or "midnight" or "paper" ? Theme : "atelier",
         Appearance = (Appearance ?? new()).Normalize(),
         CodeSize = double.IsFinite(CodeSize) ? Math.Clamp(CodeSize, 11, 18) : 13,
         InterfaceFont = InterfaceFont is "geist" or "inter" or "modern" or "geometric" or "windows" or "swiss" or "editorial" or "monospace" ? InterfaceFont : "geist",

@@ -59,6 +59,11 @@ public static partial class Palette {
         } else {
             Set("Backdrop", Bar.Color); Set("GlassBase", Bar.Color); Set("Chrome", Bar.Color); Set("Pane", Bar.Color); Set("Popup", Raised.Color);
             Set("PrimaryHover", PrimaryFill.Color); Set("PrimaryPressed", PrimaryFill.Color);
+            if (Current.Id == "lavender") {
+                Set("Backdrop", Color.Parse("#F3F0E8")); Set("GlassBase", Backdrop.Color);
+                Set("Chrome", Raised.Color); Set("Popup", Ground.Color);
+                Set("PrimaryHover", Color.Parse("#674783")); Set("PrimaryPressed", Color.Parse("#583B73"));
+            }
             foreach (var stop in Sheen.GradientStops) stop.Color = Colors.Transparent;
             foreach (var stop in RimLight.GradientStops) stop.Color = Hairline.Color;
         }
