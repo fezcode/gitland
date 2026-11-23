@@ -19,7 +19,7 @@ try {
 
     $forgeRoot    = Resolve-Path $ForgeDir
     $forgeGui     = Join-Path $forgeRoot 'build\forge.exe'
-    $uninstaller  = Join-Path $forgeRoot 'build\uninstall.exe'
+    $uninstaller  = Join-Path $forgeRoot 'build\stub.exe'
     $payloadDir   = Join-Path $PSScriptRoot "dist\$Rid"
     $outDir       = Join-Path $PSScriptRoot 'dist\installer'
     $setupPath    = Join-Path $outDir "Gitland-Setup-$version.exe"
@@ -69,15 +69,13 @@ try {
         throw 'The payload is not self-contained. Run build.ps1 -Payload first.'
     }
 
-    Write-Host "`n[3/4] Checking Forge..." -ForegroundColor Cyan
-    foreach ($required in @($forgeGui, $uninstaller)) {
-        if (-not (Test-Path -LiteralPath $required)) {
-            throw "Missing $required. Run 'gobake build' in $forgeRoot first."
-        }
-    }
-    Assert-GuiExecutable $forgeGui
-    Assert-GuiExecutable $uninstaller
-    Write-Host "  using $forgeGui" -ForegroundColor DarkGray
+Write-Host "`n[3/4] Checking prebuilt Forge 2..." -ForegroundColor Cyan
+foreach ($relative in @('build/forge.exe', 'build/stub.exe', 'build/wizard/Forge.Wizard.exe', 'build/wizard/libSkiaSharp.dll', 'build/wizard/libHarfBuzzSharp.dll')) {
+    $required = Join-Path $forgeRoot $relative
+    if (-not (Test-Path -LiteralPath $required)) { throw "Missing $required. Run 'gobake build' in $forgeRoot first." }
+}
+$forgeVersion = & $forgeGui --version
+if ($LASTEXITCODE -ne 0 -or $forgeVersion -notmatch '^forge v2\.') { throw 'Forge 2 is required. Rebuild the sibling Forge toolkit.' }
 
     Write-Host "`n[4/4] Building Setup.exe..." -ForegroundColor Cyan
 

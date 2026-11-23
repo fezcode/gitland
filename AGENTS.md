@@ -74,11 +74,15 @@ steps in order and stop/report any failure before proceeding:
   must stay self-contained: `installer.ps1` fails when
   `System.Private.CoreLib.dll` is absent, because a framework-dependent payload
   installs an app that needs a .NET runtime the user may not have.
-- User settings live in `%LOCALAPPDATA%\Gitland\settings.json` (see
-  `src/Gitland.App/Program.cs`, overridable with `GITLAND_SETTINGS_PATH`) and are
-  removed only when the user ticks the uninstaller's remove-settings option.
-  Gitland does not use `%APPDATA%\fezcode`; do not "correct" this path to match
-  the other Fezcode apps, or uninstall will sweep a directory that never exists.
+- User settings live in `%APPDATA%\fezcode\Gitland\settings.json`, following the
+  Fezcode convention (settings in Roaming `%APPDATA%\fezcode\<App>`, logs/caches in
+  `%LOCALAPPDATA%\fezcode\<App>`). Paths are computed only in
+  `src/Gitland.Core/AppPaths.cs`; `GITLAND_SETTINGS_PATH` overrides the file. On
+  startup `AppPaths.MigrateLegacy` moves the pre-0.15 `%LOCALAPPDATA%\Gitland`
+  folder across without overwriting (a copy already at the new location wins and
+  the stale legacy copy is deleted, so the old folder is always removed). `forge.toml` `[uninstall] settings_dirs` must
+  name the same folders; settings are removed only when the user ticks the
+  uninstaller's remove-settings option.
 - Fail on inconsistent versions, failed tests, a missing or stale payload, or a
   non-GUI Setup executable. Never report an old installer as a new success.
 - Check GUI Forge process exit codes with `Start-Process -Wait -PassThru`:

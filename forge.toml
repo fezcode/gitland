@@ -1,6 +1,6 @@
 [app]
 name = "Gitland"
-version = "0.14.5"
+version = "0.15.0"
 id = "com.fezcode.gitland"
 icon = "src/Gitland.App/Assets/gitland.ico"
 
@@ -18,7 +18,8 @@ window_title = "Gitland Setup"
 default_dir = "${LOCALAPPDATA}/Programs/Gitland"
 
 [uninstall]
-settings_dirs = ["${LOCALAPPDATA}/Gitland"]
+# Settings live in %APPDATA%\fezcode\Gitland (src/Gitland.Core/AppPaths.cs).
+settings_dirs = ["${APPDATA}/fezcode/Gitland"]
 
 [[steps]]
 type = "welcome"

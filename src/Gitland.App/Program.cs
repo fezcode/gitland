@@ -14,9 +14,11 @@ internal static class Program {
 }
 
 public sealed class GitlandApplication : Application {
-    public static readonly SettingsStore SettingsStore = new(Environment.GetEnvironmentVariable("GITLAND_SETTINGS_PATH") ?? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Gitland", "settings.json"));
+    static readonly string? SettingsOverride = Environment.GetEnvironmentVariable("GITLAND_SETTINGS_PATH");
+    public static readonly SettingsStore SettingsStore = new(SettingsOverride ?? AppPaths.SettingsFile);
     public static UserSettings Preferences { get; set; } = new();
     public override void Initialize() {
+        if (SettingsOverride is null) AppPaths.MigrateLegacy();
         Preferences = SettingsStore.Load(); Palette.Apply(Preferences.Theme);
         Palette.ApplyFonts(Preferences.InterfaceFont, Preferences.CodeFont);
         RequestedThemeVariant = Palette.Current.Light ? ThemeVariant.Light : ThemeVariant.Dark;

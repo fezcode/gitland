@@ -8,7 +8,7 @@ Gitland speaks version 1 of the Hisashi OS Window Layer (hoswl) protocol over a 
 2. In Gitland, open **Settings → Integrations** and check **Enable hoswl integration**.
 3. The status changes to **Connected to Hisashi** after its welcome message. Focus Gitland to see its menus in Hisashi’s menubar.
 
-The integration defaults to off and persists with other preferences in `%LOCALAPPDATA%/Gitland/settings.json`. If Hisashi is absent, Gitland waits in the background and retries every two seconds. Turning the switch off sends `enable: false`; a previously established connection can stay open. Closing Gitland cancels pipe I/O and closes the client. Gitland’s title-bar menu works independently.
+The integration defaults to off and persists with other preferences in `%APPDATA%/fezcode/Gitland/settings.json`. If Hisashi is absent, Gitland waits in the background and retries every two seconds. Turning the switch off sends `enable: false`; a previously established connection can stay open. Closing Gitland cancels pipe I/O and closes the client. Gitland’s title-bar menu works independently.
 
 ## Menus
 
