@@ -11,7 +11,7 @@ homepage = "https://github.com/fezcode/gitland"
 support_url = "https://github.com/fezcode/gitland/issues"
 
 [ui]
-theme = "mica"
+theme = "glass"
 window_title = "Gitland Setup"
 
 [install]
